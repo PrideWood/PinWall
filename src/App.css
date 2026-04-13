@@ -1,0 +1,619 @@
+.workspace-shell {
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.12)),
+    repeating-linear-gradient(90deg, rgba(78, 54, 30, 0.038) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(0deg, rgba(78, 54, 30, 0.032) 0 1px, transparent 1px 38px),
+    linear-gradient(112deg, #d9c49a, #cfba91 48%, #d7c19a);
+}
+
+.workspace-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 18px;
+  background: rgba(255, 253, 246, 0.42);
+  border-bottom: 1px solid rgba(57, 48, 35, 0.12);
+  position: relative;
+  z-index: 300;
+}
+
+.workspace-name {
+  color: #2a261f;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.workspace-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.workspace-tabs button {
+  min-height: 36px;
+  padding: 8px 13px;
+  color: #2f342f;
+  background: rgba(255, 253, 246, 0.68);
+  border: 1px solid rgba(57, 48, 35, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 5px 14px rgba(61, 43, 26, 0.08);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.workspace-tabs button.is-active {
+  color: #fffef8;
+  background: #2f6f63;
+  border-color: rgba(17, 61, 54, 0.3);
+}
+
+.surface-slot {
+  min-height: 0;
+}
+
+.surface-slot > .pinwall-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.pinwall-shell {
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  color: #22201b;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.12)),
+    repeating-linear-gradient(90deg, rgba(78, 54, 30, 0.038) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(0deg, rgba(78, 54, 30, 0.032) 0 1px, transparent 1px 38px),
+    linear-gradient(112deg, #d9c49a, #cfba91 48%, #d7c19a);
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 360px) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px 22px;
+  background: transparent;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-pin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #bf3150;
+  box-shadow: 0 2px 0 #822239, 0 7px 14px rgba(74, 37, 25, 0.22);
+}
+
+.brand h1,
+.brand p {
+  margin: 0;
+}
+
+.brand h1 {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.search-box {
+  display: block;
+}
+
+.search-box input,
+.owner-login-form input,
+.editor-pane input,
+.editor-pane textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(57, 48, 35, 0.24);
+  border-radius: 8px;
+  color: #2a261f;
+  background: rgba(255, 253, 246, 0.92);
+  font: inherit;
+}
+
+.search-box input,
+.owner-login-form input,
+.editor-pane input {
+  min-height: 40px;
+  padding: 8px 11px;
+}
+
+.admin-entry {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.owner-badge {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #3d3528;
+  font-size: 0.85rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.topbar button,
+.modal-backdrop button,
+.note-tools button {
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.topbar button:disabled,
+.modal-backdrop button:disabled,
+.note-tools button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.primary-button,
+.quiet-button {
+  min-height: 40px;
+  padding: 9px 13px;
+}
+
+.primary-button {
+  color: #fffef8;
+  background: #2f6f63;
+  box-shadow: 0 6px 14px rgba(17, 61, 54, 0.2);
+}
+
+.quiet-button {
+  color: #2f342f;
+  background: rgba(255, 253, 246, 0.68);
+  border: 1px solid rgba(57, 48, 35, 0.2);
+  box-shadow: 0 5px 14px rgba(61, 43, 26, 0.08);
+}
+
+.quiet-button.danger {
+  color: #8d2335;
+}
+
+.wall-viewport {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.wall-viewport:active {
+  cursor: grabbing;
+}
+
+.wall-canvas {
+  position: relative;
+  transform-origin: top left;
+  transition: transform 80ms linear;
+}
+
+.sticky-note {
+  --note-color: #fff2a8;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 22px 20px;
+  color: #282319;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.36), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px),
+    var(--note-color);
+  border: 1px solid rgba(96, 73, 36, 0.1);
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  font-family: "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.72) inset,
+    0 14px 18px rgba(66, 45, 24, 0.22),
+    4px 21px 30px rgba(66, 45, 24, 0.12);
+  transition: opacity 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.sticky-note::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.22), transparent 18%, transparent 82%, rgba(91, 62, 28, 0.06)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 28%, rgba(88, 59, 28, 0.08));
+}
+
+.sticky-note::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 12px;
+  bottom: 5px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(72, 50, 28, 0.12);
+  filter: blur(8px);
+  transform: rotate(-1deg);
+  pointer-events: none;
+}
+
+.sticky-note:hover,
+.sticky-note.is-match {
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.72) inset,
+    0 17px 24px rgba(66, 45, 24, 0.28),
+    0 0 0 4px rgba(47, 111, 99, 0.14);
+}
+
+.sticky-note.is-muted {
+  opacity: 0.3;
+  filter: saturate(0.72);
+}
+
+.pin-head {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.7) 0 11%, transparent 13%),
+    radial-gradient(circle at 45% 42%, #d44d69 0 38%, #9f2540 72%);
+  box-shadow: 0 2px 0 #792136, 0 6px 11px rgba(75, 31, 20, 0.28);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.pin-head::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 13px;
+  width: 2px;
+  height: 16px;
+  background: rgba(88, 65, 49, 0.42);
+  transform: rotate(9deg);
+  transform-origin: top;
+}
+
+.sticky-note h2 {
+  margin: 8px 0 0;
+  font-size: 23px;
+  line-height: 1.08;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+}
+
+.sticky-note p {
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  font-size: 17px;
+  line-height: 1.46;
+  position: relative;
+  z-index: 1;
+}
+
+.tag-line,
+.modal-tags {
+  margin-top: auto;
+  color: #645132;
+  font-size: 13px;
+  font-weight: 800;
+  position: relative;
+  z-index: 1;
+}
+
+.note-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.note-tools button {
+  padding: 5px 7px;
+  color: #2a261f;
+  background: rgba(255, 253, 246, 0.58);
+  border: 1px solid rgba(72, 53, 30, 0.16);
+  font-size: 12px;
+}
+
+.wall-state-note {
+  position: absolute;
+  left: 168px;
+  top: 128px;
+  width: min(320px, calc(100vw - 42px));
+  padding: 24px 22px;
+  color: #282319;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.38), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px),
+    #fff2a8;
+  border: 1px solid rgba(96, 73, 36, 0.1);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.72) inset,
+    0 14px 18px rgba(66, 45, 24, 0.22),
+    4px 21px 30px rgba(66, 45, 24, 0.12);
+  font-family: "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+  font-size: 18px;
+  line-height: 1.45;
+  transform: rotate(-3deg);
+}
+
+.wall-state-note.is-error {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.36), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px),
+    #ffd1dc;
+}
+
+.wall-state-note.is-empty {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.36), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.13) 0 1px, transparent 1px 7px),
+    #cde7ff;
+}
+
+.status-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 18px;
+  color: #4c473c;
+  background: transparent;
+  font-size: 13px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(40, 35, 28, 0.44);
+}
+
+.note-modal {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100svh - 40px));
+  overflow: auto;
+  padding: 22px;
+  color: #27231b;
+  background: #fff7cf;
+  border-radius: 8px;
+  box-shadow: 0 28px 60px rgba(34, 25, 16, 0.38);
+}
+
+.login-modal {
+  width: min(420px, 100%);
+  padding: 22px;
+  color: #27231b;
+  background: #fff7cf;
+  border-radius: 8px;
+  box-shadow: 0 28px 60px rgba(34, 25, 16, 0.38);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.markdown-body {
+  text-align: left;
+  font-family: "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+}
+
+.markdown-body h2 {
+  margin: 0 0 16px;
+  font-size: 32px;
+}
+
+.markdown-body h1,
+.markdown-body h3 {
+  margin: 16px 0 8px;
+}
+
+.markdown-body p,
+.markdown-body li,
+.markdown-body blockquote {
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.markdown-body code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: rgba(89, 67, 34, 0.12);
+}
+
+.markdown-body blockquote {
+  margin: 16px 0;
+  padding-left: 14px;
+  border-left: 4px solid rgba(47, 111, 99, 0.45);
+  color: #514633;
+}
+
+.markdown-body a {
+  color: #245f56;
+}
+
+.editor-pane {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+}
+
+.owner-login-form {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+}
+
+.owner-login-form h2 {
+  margin: 0;
+}
+
+.owner-login-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.editor-pane label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.editor-pane textarea {
+  min-height: 300px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.board-shell {
+  background: #f7f8fb;
+  color: #252735;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.board-stage {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  background: #f7f8fb;
+}
+
+.board-stage .excalidraw {
+  min-height: 0;
+  height: 100%;
+}
+
+.board-save-status {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 5;
+  border: 1px solid rgba(38, 39, 53, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 10px 24px rgba(31, 31, 42, 0.08);
+  color: #252735;
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 8px 11px;
+}
+
+.board-save-status.is-saving {
+  color: #63521e;
+}
+
+.board-save-status.is-failed {
+  color: #a52626;
+}
+
+.board-message {
+  align-items: center;
+  color: #50505f;
+  display: flex;
+  flex-direction: column;
+  font-size: 1rem;
+  gap: 8px;
+  height: 100%;
+  justify-content: center;
+  padding: 22px;
+  text-align: center;
+}
+
+.board-message strong {
+  color: #252735;
+}
+
+@media (max-width: 780px) {
+  .workspace-nav {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 10px 13px;
+  }
+
+  .workspace-tabs button {
+    flex: 1;
+  }
+
+  .pinwall-shell {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .topbar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 13px;
+  }
+
+  .brand h1 {
+    font-size: 22px;
+  }
+
+  .admin-entry {
+    justify-content: stretch;
+  }
+
+  .admin-entry button {
+    flex: 1;
+  }
+
+  .status-strip {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+  }
+
+  .note-modal {
+    width: 100%;
+    min-height: 100svh;
+    max-height: 100svh;
+    border-radius: 0;
+    box-sizing: border-box;
+  }
+
+  .modal-actions {
+    position: sticky;
+    top: 0;
+    padding-bottom: 8px;
+    background: #fff7cf;
+    flex-wrap: wrap;
+  }
+}
