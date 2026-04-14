@@ -1,180 +1,95 @@
+# AGENTS.md
 
-## **Project: PinWall**
+## Project: PinWall
 
-PinWall is now a lightweight owner-first workspace with two related surfaces:
-1. **Wall** — a spatial sticky-note wall with structured notes
-2. **Board** — a freeform drawing/sketch surface powered by Excalidraw
-Both live inside the same app and share a unified entry experience, but they are **not the same product surface** and must not be forced into the same data model.
+PinWall is a lightweight owner-first workspace with two surfaces:
+
+- **Wall**: a spatial sticky-note wall with structured notes
+- **Board**: a freeform Excalidraw canvas with cloud persistence
+
+Both live in the same app, but they are **separate surfaces** and **must not share one data model**.
+
 ---
 
-## **1. Core Product Philosophy**
+## Core Principles
 
-PinWall is NOT:
-- a traditional note-taking app
-- a kanban board
-- a CMS dashboard
-- a document editor
-- a whiteboard-only app
-PinWall IS:
-- a personal-first online workspace
-- a unified entry to two complementary surfaces:
-    - a structured sticky-note wall
-    - a freeform sketch board
-- owner-editable, visitor-readable where allowed
-- spatial and tactile in feel
----
-
-## **2. Product Surfaces**
-
-### **2.1 Wall**
-
-The Wall is a visual sticky-note wall.
-It supports:
-- fixed-position notes
-- overlap and stacking
-- slight rotation
-- search
-- expanded note reading/editing
-- structured note data
-The Wall must preserve the feeling of:
-> “a real wall with notes pinned to it”
-It must NOT degrade into:
-- a list
-- a masonry feed
+PinWall is **not**:
 - a dashboard
+- a CMS
+- a kanban board
 - a generic notes app
----
+- a nested Excalidraw fork
 
-### **2.2 Board**
-
-The Board is a freeform sketching/drawing surface powered by Excalidraw.
-It supports:
-- free drawing
-- spatial composition
-- Excalidraw scene editing
-- later persistence of scene JSON
-The Board must be integrated as a component dependency, not as a cloned nested project.
-**Important constraint:**
-- Do NOT clone the Excalidraw repository into this repo
-- Use @excalidraw/excalidraw as an installed dependency
-- Treat Board data separately from Wall notes
----
-
-## **3. User Roles**
-
-### **3.1 Visitor**
-
-- Can view public Wall notes
-- Can search public notes
-- Can open expanded note view
-- Can access public Board views if enabled
-- Cannot edit Wall or Board content
-
-### **3.2 Owner**
-
-- Can create, edit, delete, move, rotate, and reorder Wall notes
-- Can access and edit Board content
-- Uses a lightweight owner login / owner mode
-- Does not use a complex admin dashboard
-All management should remain direct and lightweight.
----
-
-## **4. Core UX Rule**
-
-The app should feel like:
+PinWall **is**:
 - a personal online workspace
-- with two different but related surfaces
-The app should NOT feel like:
-- a backend admin panel
-- a database UI
-- a generic white-label productivity app
+- a minimal public/private publishing surface
+- spatial, tactile, lightweight
+- owner-editable, visitor-readable where allowed
+
 ---
 
-## **5. Navigation / Entry Structure**
+## Surfaces
 
-The app now has a unified entry and multiple views.
-Minimum structure:
-- a simple entry/home/workspace view
-- a **Wall** view
-- a **Board** view
-Navigation should stay lightweight and visually consistent.
-Do not overbuild the navigation.
+### Wall
+Wall is a sticky-note wall.
+
+Requirements:
+- fixed-position notes
+- overlap, stacking, slight rotation
+- note modal for reading/editing
+- search
+- owner can create, edit, delete, move, rotate, reorder notes
+- visitors can only view public notes
+
+Wall must feel like:
+> a real wall with pinned notes
+
+Do not turn Wall into:
+- a list
+- a grid
+- masonry
+- a management dashboard
+
 ---
 
-## **6. Wall Requirements**
+### Board
+Board is an Excalidraw-based drawing surface.
 
-### **6.1 Wall Canvas**
+Requirements:
+- Excalidraw integrated as an npm dependency
+- board scene persisted to Supabase
+- images uploaded to Supabase Storage
+- image metadata stored separately
+- owner can edit
+- visitors can view public boards if enabled
 
-- Full-page or dominant wall surface
-- Notes are absolutely positioned
-- No list/grid/masonry layout allowed
-- Notes must have:
-    - x
-    - y
-    - z-index
-    - rotation
-- Overlap is allowed
+Do not clone the Excalidraw repo into this project.
 
-### **6.2 Sticky Note Interaction**
-
-Default:
-- Click opens expanded note view
-Owner mode:
-- Drag to move
-- Rotate
-- Delete
-- Edit only through expanded note modal
-
-### **6.3 Expanded Note View**
-
-- Modal / overlay
-- Full note reading
-- Basic Markdown rendering
-- Owner editing lives here
-
-### **6.4 Search**
-
-Search matches:
-- title
-- content
-- tags
-Results should:
-- highlight matching notes
-- fade non-matching notes
-- preserve wall feeling
 ---
 
-## **7. Board Requirements**
+## Roles
 
-### **7.1 Integration**
+### Visitor
+- can read public Wall notes
+- can search notes
+- can open note modal
+- can read public boards if allowed
+- cannot edit Wall or Board
 
-- Integrate Excalidraw via npm dependency
-- Use Excalidraw as a React component inside this app
-- Do not build a nested standalone Excalidraw app
+### Owner
+- authenticated via real Supabase Auth
+- can edit Wall and Board
+- can upload board images
+- no fake local admin-key auth
 
-### **7.2 Data Model Separation**
-
-Board scene data must NOT be stored in the notes table.
-Use a separate table for boards, e.g.:
-- boards
-
-### **7.3 Persistence Direction**
-
-The Board should later be able to store:
-- title
-- slug
-- scene JSON
-- visibility/public status
-- timestamps
-But this persistence can be implemented after the basic Board view is working.
 ---
 
-## **8. Data Model**
+## Data Model
 
-### **8.1 Notes table**
-
-Canonical notes table fields:
+### `notes`
+Canonical fields:
 - id
+- owner_id
 - title
 - content
 - tags
@@ -188,91 +103,118 @@ Canonical notes table fields:
 - is_public
 - created_at
 - updated_at
-- linked_board_id (optional, future)
+- linked_board_id (optional)
 
-### **8.2 Boards table**
-
-Canonical boards table fields:
+### `boards`
+Canonical fields:
 - id
+- owner_id
 - title
 - slug
 - scene_json
 - is_public
 - created_at
 - updated_at
-Do not mix note rows and board rows in one table.
+
+### `board_images`
+Canonical fields:
+- id
+- board_id
+- owner_id
+- storage_path
+- public_url
+- mime_type
+- file_size
+- excalidraw_file_id (if used)
+- created_at
+
+Do not mix note rows, board rows, and image metadata in one table.
+
 ---
 
-## **9. Architecture Constraints**
+## Persistence Rules
 
-### **MUST**
+### Wall
+- local drag should feel smooth
+- final position must persist on drag end
+- persist only needed DB fields
+- use DB column names, not UI camelCase names
 
-- Keep using a frontend-first architecture
-- Use BaaS such as Supabase
-- Keep Wall and Board as separate surfaces
-- Use separate data storage models for Wall and Board
+### Board
+- scene autosaves with debounce
+- image files must not live only in memory
+- uploaded images must go to Supabase Storage
+- metadata must be written to `board_images`
+- board reload must restore actual image content, not placeholder boxes
 
-### **MUST NOT**
-
-- clone Excalidraw repo into this project
-- create a nested app inside the repo
-- merge Excalidraw scene JSON into notes
-- create a heavy admin dashboard
 ---
 
-## **10. UI / UX Guidelines**
+## Auth and Security
 
-### **Shared app feeling**
+- use real Supabase Auth
+- owner rights come from authenticated session + RLS
+- do not rely on fake frontend-only owner state
+- use `owner_id = auth.uid()` style ownership rules
+- public users may read only public rows
+- do not expose server-only secrets
+- public/publishable frontend keys are allowed
 
-- coherent navigation
-- coherent owner entry
-- lightweight workspace feel
-
-### **Wall feeling**
-
-- tactile
-- paper-like
-- layered
-- spatial
-
-### **Board feeling**
-
-- open
-- flexible
-- sketch-oriented
-Do not force the Board to look like the Wall.
-Do not force the Wall to behave like the Board.
 ---
 
-## **11. Security / Access Rules**
+## UI Rules
 
-- Visitor access should remain read-only where public
-- Owner edit access should remain lightweight but protected
-- No client-side secrets
-- RLS and database policies should be respected once write access is connected
+### Shared
+- minimal, tidy, lightweight
+- floating controls preferred over heavy nav
+- no bulky admin panel
+
+### Wall
+- sticky controls may appear on hover/focus
+- note action clicks must not trigger note open
+- note body click still opens note
+- sticky note text uses handwritten-style font
+
+### Board
+- preserve Excalidraw usability
+- keep overlays unobtrusive
+- do not break bottom-left Excalidraw controls
+
 ---
 
-## **12. Development Priorities**
+## Architecture Constraints
 
-### **Current MVP Priority**
+Must:
+- use Vite frontend
+- use Supabase for auth + DB + storage
+- keep Wall and Board separate
+- keep implementation small and practical
 
-1. Stable Wall backed by Supabase
-2. Lightweight owner workflow
-3. Basic Board integration via Excalidraw package
-4. Unified navigation between Wall and Board
+Must not:
+- clone Excalidraw repo
+- create nested apps
+- merge Board JSON into `notes`
+- overengineer media management
+- redesign the product into a dashboard
 
-### **Later**
-
-- Board persistence to Supabase
-- Link notes to boards
-- Public/private board controls
 ---
 
-## **13. Important Design Rule**
+## Current Priorities
+
+1. Stable Wall editing and persistence
+2. Stable Board persistence
+3. Stable Board image upload + restore flow
+4. Clean owner auth flow
+5. Deployment-ready Vercel setup
+6. Small UI polish only
+
+---
+
+## Design Rule
 
 Always preserve this distinction:
-- **Wall = structured note wall**
-- **Board = freeform sketch surface**
-They belong in the same workspace,
-but they are not the same interface and not the same data model.
-If a proposed change blurs them into one messy hybrid, reject or redesign it.
+
+- **Wall = structured sticky-note wall**
+- **Board = freeform sketch canvas**
+
+Same workspace, different surfaces, different data.
+If a change blurs them into one messy hybrid, reject or redesign it.

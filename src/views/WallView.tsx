@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
-import { BringToFront, RotateCcwSquare, RotateCwSquare, Search, SquarePen, X } from 'lucide-react'
+import { BringToFront, LocateFixed, Pencil, RotateCwSquare, Search, SquarePen, SquareX, Trash2, X } from 'lucide-react'
 import '../App.css'
 import type { Session } from '@supabase/supabase-js'
 import { signInOwner } from '../lib/authRepository'
@@ -12,6 +12,9 @@ import type { DragState, NoteDraft, PinNote } from '../types'
 const minimumWallSize = { width: 2200, height: 1400 }
 const wallPadding = { x: 720, y: 480 }
 const dragThreshold = 6
+const minWallZoom = 0.75
+const maxWallZoom = 1.6
+const wheelZoomSensitivity = 0.0015
 const noteColors = ['#fff2a8', '#ffd1dc', '#cdf2ca', '#cde7ff', '#f5d6ff']
 const ownerLoginEmail = 'boquanchai@gmail.com'
 const emptyDraft = (zIndex: number): NoteDraft => ({
@@ -29,6 +32,15 @@ const emptyDraft = (zIndex: number): NoteDraft => ({
 })
 
 const notePreview = (content: string) => content.replace(/[#*_`>\-[\]()]/g, '').slice(0, 150)
+const pointerAngleFromCenter = (clientX: number, clientY: number, centerX: number, centerY: number) =>
+  (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI
+
+const normalizeRotation = (rotation: number) => {
+  const normalized = ((((rotation + 180) % 360) + 360) % 360) - 180
+  return Math.round(normalized * 10) / 10
+}
+
+const clampZoom = (zoom: number) => Math.max(minWallZoom, Math.min(maxWallZoom, zoom))
 
 const noteToDraft = (note: PinNote): NoteDraft => ({
   title: note.title ?? '',
@@ -79,15 +91,18 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   const [ownerPassword, setOwnerPassword] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [deleteTargetNoteId, setDeleteTargetNoteId] = useState<string | null>(null)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [notice, setNotice] = useState('Loading the wall...')
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [wallOffset, setWallOffset] = useState({ x: 0, y: 0 })
+  const [wallZoom, setWallZoom] = useState(1)
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
+  const deleteTargetNote = notes.find((note) => note.id === deleteTargetNoteId) ?? null
   const isAdmin = Boolean(ownerSession)
   const modalDraft = draft ?? (selectedNote ? noteToDraft(selectedNote) : null)
   const matchingNotes = useMemo(() => notes.filter((note) => matchesSearch(note, query)), [notes, query])
@@ -102,10 +117,20 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     [viewportSize.height, viewportSize.width],
   )
 
-  const clampWallOffset = (nextOffset: { x: number; y: number }) => ({
-    x: Math.max(Math.min(0, viewportSize.width - wallSize.width), Math.min(0, nextOffset.x)),
-    y: Math.max(Math.min(0, viewportSize.height - wallSize.height), Math.min(0, nextOffset.y)),
-  })
+  const clampWallOffset = useCallback(
+    (nextOffset: { x: number; y: number }, zoom = wallZoom) => {
+      const scaledWidth = wallSize.width * zoom
+      const scaledHeight = wallSize.height * zoom
+      const minX = Math.min(0, viewportSize.width - scaledWidth)
+      const minY = Math.min(0, viewportSize.height - scaledHeight)
+
+      return {
+        x: Math.max(minX, Math.min(0, nextOffset.x)),
+        y: Math.max(minY, Math.min(0, nextOffset.y)),
+      }
+    },
+    [viewportSize.height, viewportSize.width, wallSize.height, wallSize.width, wallZoom],
+  )
 
   useEffect(() => {
     loadNotes()
@@ -130,6 +155,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
 
     setIsEditing(false)
     setDraft(null)
+    setDeleteTargetNoteId(null)
   }, [ownerSession])
 
   useEffect(() => {
@@ -160,6 +186,10 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
 
     return () => resizeObserver.disconnect()
   }, [])
+
+  useEffect(() => {
+    setWallOffset((current) => clampWallOffset(current, wallZoom))
+  }, [clampWallOffset, wallZoom])
 
   const persistNote = async (
     note: PinNote,
@@ -314,7 +344,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   }
 
   const removeSelectedNote = async () => {
-    if (!selectedNote) return
+    if (!deleteTargetNote) return
 
     if (!ownerSession) {
       setNotice('Log in as owner before deleting notes.')
@@ -323,9 +353,13 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     }
 
     try {
-      await deleteNote(selectedNote.id)
-      setNotes((current) => current.filter((note) => note.id !== selectedNote.id))
-      setSelectedNoteId(null)
+      await deleteNote(deleteTargetNote.id)
+      setNotes((current) => current.filter((note) => note.id !== deleteTargetNote.id))
+      if (selectedNoteId === deleteTargetNote.id) {
+        setSelectedNoteId(null)
+      }
+      setDeleteTargetNoteId(null)
+      setIsDeleteConfirmOpen(false)
       setIsEditing(false)
       setNotice('Note removed.')
     } catch (error) {
@@ -333,16 +367,88 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     }
   }
 
-  const rotateNote = (note: PinNote, amount: number) => {
-    void persistNote({ ...note, rotation: Math.max(-15, Math.min(15, note.rotation + amount)) })
-  }
-
   const bringForward = (note: PinNote) => {
     void persistNote({ ...note, z_index: maxZ + 1 })
   }
 
+  const editNote = (note: PinNote) => {
+    setSelectedNoteId(note.id)
+    setDraft(noteToDraft(note))
+    setIsEditing(true)
+  }
+
+  const confirmDeleteNote = (note: PinNote) => {
+    setDeleteTargetNoteId(note.id)
+    setIsDeleteConfirmOpen(true)
+  }
+
+  const resetWallView = () => {
+    const defaultZoom = 1
+    setWallZoom(defaultZoom)
+    setWallOffset(clampWallOffset({ x: 0, y: 0 }, defaultZoom))
+  }
+
+  const handleWallWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault()
+
+    const isZoomGesture = event.ctrlKey || event.metaKey
+
+    if (!isZoomGesture) {
+      setWallOffset((current) => clampWallOffset({ x: current.x - event.deltaX, y: current.y - event.deltaY }))
+      return
+    }
+
+    const wallRect = wallRef.current?.getBoundingClientRect()
+    if (!wallRect) return
+
+    const currentZoom = wallZoom
+    const nextZoom = clampZoom(currentZoom * Math.exp(-event.deltaY * wheelZoomSensitivity))
+    const pointerX = event.clientX - wallRect.left
+    const pointerY = event.clientY - wallRect.top
+
+    setWallZoom(nextZoom)
+    setWallOffset((currentOffset) => {
+      const wallPointX = (pointerX - currentOffset.x) / currentZoom
+      const wallPointY = (pointerY - currentOffset.y) / currentZoom
+
+      return clampWallOffset(
+        {
+          x: pointerX - wallPointX * nextZoom,
+          y: pointerY - wallPointY * nextZoom,
+        },
+        nextZoom,
+      )
+    })
+  }
+
+  const handleRotationPointerDown = (event: React.PointerEvent<HTMLButtonElement>, note: PinNote) => {
+    if (!isAdmin) return
+
+    stopNoteToolEvent(event)
+    dragMovedRef.current = false
+    dragStartNoteRef.current = note
+
+    const wallRect = wallRef.current?.getBoundingClientRect()
+    const centerX = (wallRect?.left ?? 0) + wallOffset.x + (note.x + note.width / 2) * wallZoom
+    const centerY = (wallRect?.top ?? 0) + wallOffset.y + (note.y + note.height / 2) * wallZoom
+
+    setDragState({
+      type: 'rotate',
+      noteId: note.id,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      centerX,
+      centerY,
+      startAngle: pointerAngleFromCenter(event.clientX, event.clientY, centerX, centerY),
+      startRotation: note.rotation,
+    })
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
   const handleWallPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) return
+    const target = event.target as HTMLElement
+    if (target.closest('.sticky-note, button, input, textarea, a')) return
 
     dragMovedRef.current = false
     dragStartNoteRef.current = null
@@ -393,15 +499,38 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       return
     }
 
+    if (dragState.type === 'rotate') {
+      if (!movedEnough) return
+
+      const currentAngle = pointerAngleFromCenter(event.clientX, event.clientY, dragState.centerX, dragState.centerY)
+      const angleDelta = currentAngle - dragState.startAngle
+      const nextRotation = normalizeRotation(dragState.startRotation + angleDelta)
+
+      setNotes((current) =>
+        current.map((note) =>
+          note.id === dragState.noteId
+            ? {
+                ...note,
+                rotation: nextRotation,
+              }
+            : note,
+        ),
+      )
+      return
+    }
+
     if (!movedEnough) return
+
+    const logicalDeltaX = deltaX / wallZoom
+    const logicalDeltaY = deltaY / wallZoom
 
     setNotes((current) =>
       current.map((note) =>
         note.id === dragState.noteId
           ? {
               ...note,
-              x: Math.max(0, Math.min(wallSize.width - note.width, dragState.startX + deltaX)),
-              y: Math.max(0, Math.min(wallSize.height - note.height, dragState.startY + deltaY)),
+              x: Math.max(0, Math.min(wallSize.width - note.width, dragState.startX + logicalDeltaX)),
+              y: Math.max(0, Math.min(wallSize.height - note.height, dragState.startY + logicalDeltaY)),
             }
           : note,
       ),
@@ -411,16 +540,35 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return
 
+    if (dragState.type === 'rotate' && dragMovedRef.current) {
+      const rotatedNote = dragStartNoteRef.current
+
+      if (rotatedNote) {
+        const currentAngle = pointerAngleFromCenter(event.clientX, event.clientY, dragState.centerX, dragState.centerY)
+        const angleDelta = currentAngle - dragState.startAngle
+        const nextNote = {
+          ...rotatedNote,
+          rotation: normalizeRotation(dragState.startRotation + angleDelta),
+        }
+
+        void persistNotePosition(nextNote, rotatedNote)
+      }
+
+      suppressNextClickRef.current = true
+    }
+
     if (dragState.type === 'note' && dragMovedRef.current) {
       const draggedNote = dragStartNoteRef.current
 
       if (draggedNote) {
         const deltaX = event.clientX - dragState.startClientX
         const deltaY = event.clientY - dragState.startClientY
+        const logicalDeltaX = deltaX / wallZoom
+        const logicalDeltaY = deltaY / wallZoom
         const nextNote = {
           ...draggedNote,
-          x: Math.max(0, Math.min(wallSize.width - draggedNote.width, dragState.startX + deltaX)),
-          y: Math.max(0, Math.min(wallSize.height - draggedNote.height, dragState.startY + deltaY)),
+          x: Math.max(0, Math.min(wallSize.width - draggedNote.width, dragState.startX + logicalDeltaX)),
+          y: Math.max(0, Math.min(wallSize.height - draggedNote.height, dragState.startY + logicalDeltaY)),
         }
 
         void persistNotePosition(nextNote, draggedNote)
@@ -460,7 +608,6 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     setSelectedNoteId(null)
     setIsEditing(false)
     setDraft(null)
-    setIsDeleteConfirmOpen(false)
   }
 
   return (
@@ -492,6 +639,9 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
               placeholder="search"
             />
           </div>
+          <button className="quiet-button icon-button view-reset-button" onClick={resetWallView} aria-label="Reset wall view" title="Reset wall view">
+            <LocateFixed size={16} strokeWidth={2.1} aria-hidden="true" />
+          </button>
           {isAdmin ? (
             <>
               <button className="primary-button icon-button" onClick={startNewNote} aria-label="New note" title="New note">
@@ -509,6 +659,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onWheel={handleWallWheel}
         aria-label="Sticky note wall"
       >
         <div
@@ -516,7 +667,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
           style={{
             width: wallSize.width,
             height: wallSize.height,
-            transform: `translate(${wallOffset.x}px, ${wallOffset.y}px)`,
+            transform: `translate(${wallOffset.x}px, ${wallOffset.y}px) scale(${wallZoom})`,
           }}
         >
           {notes.map((note) => {
@@ -543,48 +694,60 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
                 {note.tags.length > 0 ? <div className="tag-line">{note.tags.map((tag) => `#${tag}`).join(' ')}</div> : null}
 
                 {isAdmin ? (
-                  <div
-                    className="note-tools"
-                    aria-label="Admin note tools"
-                    onClick={stopNoteToolEvent}
-                    onMouseUp={stopNoteToolEvent}
-                    onPointerDown={stopNoteToolEvent}
-                    onPointerUp={stopNoteToolEvent}
-                  >
+                  <>
                     <button
+                      className="rotation-handle"
                       type="button"
-                      onClick={(event) => {
-                        stopNoteToolEvent(event)
-                        rotateNote(note, -2)
-                      }}
-                      aria-label="Rotate left"
-                      title="Rotate left"
-                    >
-                      <RotateCcwSquare size={14} strokeWidth={2} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        stopNoteToolEvent(event)
-                        rotateNote(note, 2)
-                      }}
-                      aria-label="Rotate right"
-                      title="Rotate right"
+                      onClick={stopNoteToolEvent}
+                      onPointerDown={(event) => handleRotationPointerDown(event, note)}
+                      aria-label="Drag to rotate note"
+                      title="Drag to rotate"
                     >
                       <RotateCwSquare size={14} strokeWidth={2} aria-hidden="true" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        stopNoteToolEvent(event)
-                        bringForward(note)
-                      }}
-                      aria-label="Bring to front"
-                      title="Bring to front"
+                    <div
+                      className="note-tools"
+                      aria-label="Admin note tools"
+                      onClick={stopNoteToolEvent}
+                      onMouseUp={stopNoteToolEvent}
+                      onPointerDown={stopNoteToolEvent}
+                      onPointerUp={stopNoteToolEvent}
                     >
-                      <BringToFront size={14} strokeWidth={2} aria-hidden="true" />
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          stopNoteToolEvent(event)
+                          bringForward(note)
+                        }}
+                        aria-label="Bring to front"
+                        title="Bring to front"
+                      >
+                        <BringToFront size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          stopNoteToolEvent(event)
+                          editNote(note)
+                        }}
+                        aria-label="Edit note"
+                        title="Edit note"
+                      >
+                        <Pencil size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          stopNoteToolEvent(event)
+                          confirmDeleteNote(note)
+                        }}
+                        aria-label="Delete note"
+                        title="Delete note"
+                      >
+                        <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </>
                 ) : null}
               </article>
             )
@@ -615,26 +778,21 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       {(selectedNote || isEditing) && modalDraft ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeModal}>
           <section className="note-modal" role="dialog" aria-modal="true" aria-label="Expanded note" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="modal-actions">
-              <button className="quiet-button" onClick={closeModal}>
-                Close
+            {isAdmin && isEditing ? null : (
+              <button className="modal-close-icon" type="button" onClick={closeModal} aria-label="Close note" title="Close">
+                <SquareX size={21} strokeWidth={1.9} aria-hidden="true" />
               </button>
-              {isAdmin && selectedNote ? (
-                <button className="quiet-button danger" onClick={() => setIsDeleteConfirmOpen(true)}>
-                  Delete
+            )}
+            {isAdmin && isEditing ? (
+              <div className="modal-actions">
+                <button className="quiet-button" onClick={closeModal}>
+                  Close
                 </button>
-              ) : null}
-              {isAdmin && selectedNote ? (
-                <button className="primary-button" onClick={() => setIsEditing((current) => !current)}>
-                  {isEditing ? 'Preview' : 'Edit'}
-                </button>
-              ) : null}
-              {isAdmin && isEditing ? (
                 <button className="primary-button" onClick={saveDraft}>
                   Save
                 </button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
             {isEditing && isAdmin ? (
               <div className="editor-pane">
@@ -723,13 +881,26 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
         </div>
       ) : null}
 
-      {isDeleteConfirmOpen && selectedNote ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsDeleteConfirmOpen(false)}>
+      {isDeleteConfirmOpen && deleteTargetNote ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            setIsDeleteConfirmOpen(false)
+            setDeleteTargetNoteId(null)
+          }}
+        >
           <section className="confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm note deletion" onMouseDown={(event) => event.stopPropagation()}>
             <h2>Delete this note?</h2>
             <p>This will remove the sticky note from the wall. Are you sure?</p>
             <div className="confirm-actions">
-              <button className="quiet-button" onClick={() => setIsDeleteConfirmOpen(false)}>
+              <button
+                className="quiet-button"
+                onClick={() => {
+                  setIsDeleteConfirmOpen(false)
+                  setDeleteTargetNoteId(null)
+                }}
+              >
                 Keep it
               </button>
               <button className="primary-button danger-action" onClick={removeSelectedNote}>

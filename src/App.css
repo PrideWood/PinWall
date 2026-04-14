@@ -288,6 +288,7 @@
   position: relative;
   overflow: hidden;
   touch-action: none;
+  overscroll-behavior: contain;
   cursor: grab;
 }
 
@@ -298,7 +299,7 @@
 .wall-canvas {
   position: relative;
   transform-origin: top left;
-  transition: transform 80ms linear;
+  will-change: transform;
 }
 
 .sticky-note {
@@ -423,21 +424,50 @@
   z-index: 1;
 }
 
-.note-tools {
+.note-tools,
+.rotation-handle {
   display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.note-tools {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: auto;
-  opacity: 0;
-  pointer-events: none;
   position: relative;
-  transform: translateY(4px);
-  transition: opacity 140ms ease, transform 140ms ease;
   z-index: 1;
 }
 
+.rotation-handle {
+  position: absolute;
+  right: 9px;
+  top: 9px;
+  z-index: 3;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #2a261f;
+  background: rgba(255, 253, 246, 0.62);
+  border: 1px solid rgba(72, 53, 30, 0.16);
+  border-radius: 8px;
+  box-shadow: 0 5px 12px rgba(66, 45, 24, 0.08);
+  cursor: grab;
+  touch-action: none;
+}
+
+.rotation-handle:active {
+  cursor: grabbing;
+}
+
 .sticky-note:hover .note-tools,
-.sticky-note:focus-within .note-tools {
+.sticky-note:focus-within .note-tools,
+.sticky-note:hover .rotation-handle,
+.sticky-note:focus-within .rotation-handle {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -456,7 +486,8 @@
 }
 
 @media (hover: none) {
-  .note-tools {
+  .note-tools,
+  .rotation-handle {
     opacity: 1;
     pointer-events: auto;
     transform: none;
@@ -520,14 +551,35 @@
 }
 
 .note-modal {
+  position: relative;
   width: min(760px, 100%);
   max-height: min(760px, calc(100svh - 40px));
   overflow: auto;
-  padding: 22px;
+  padding: 42px 22px 22px;
   color: #27231b;
   background: #fff7cf;
   border-radius: 8px;
   box-shadow: 0 28px 60px rgba(34, 25, 16, 0.38);
+}
+
+.modal-close-icon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: rgba(39, 35, 27, 0.76);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.modal-close-icon:hover {
+  color: #27231b;
+  background: rgba(83, 66, 36, 0.08);
 }
 
 .login-modal {
@@ -800,10 +852,47 @@
   height: 100%;
 }
 
-.board-save-status {
+.board-upload-panel {
   position: absolute;
   right: 18px;
   top: 18px;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.board-upload-status {
+  display: grid;
+  gap: 2px;
+  max-width: min(280px, calc(100vw - 98px));
+  border: 1px solid rgba(38, 39, 53, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 24px rgba(31, 31, 42, 0.08);
+  color: #252735;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  padding: 8px 10px;
+  backdrop-filter: blur(10px);
+}
+
+.board-upload-status strong {
+  font-size: 0.8rem;
+}
+
+.board-upload-status.is-uploading {
+  color: #63521e;
+}
+
+.board-upload-status.is-failed {
+  color: #a52626;
+}
+
+.board-save-status {
+  position: absolute;
+  right: 18px;
+  top: 68px;
   z-index: 5;
   border: 1px solid rgba(38, 39, 53, 0.12);
   border-radius: 8px;

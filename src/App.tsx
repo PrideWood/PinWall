@@ -24,6 +24,7 @@ function App() {
   const [ownerSession, setOwnerSession] = useState<Session | null>(null)
   const [authNotice, setAuthNotice] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
   const [shouldOpenWallLogin, setShouldOpenWallLogin] = useState(false)
   const isSurfaceRoute = route === 'wall' || route === 'board'
 
@@ -74,6 +75,7 @@ function App() {
     try {
       await signOutOwner()
       setOwnerSession(null)
+      setIsLogoutConfirmOpen(false)
       setAuthNotice('Owner mode is off.')
     } catch (error) {
       setAuthNotice(error instanceof Error ? error.message : 'Could not sign out.')
@@ -109,7 +111,7 @@ function App() {
             <ArrowRightLeft size={19} strokeWidth={2.2} aria-hidden="true" />
           </button>
           {ownerSession ? (
-            <button className="auth-float-bubble" type="button" onClick={logoutOwner} disabled={isAuthBusy} aria-label="Log out" title="Log out">
+            <button className="auth-float-bubble" type="button" onClick={() => setIsLogoutConfirmOpen(true)} disabled={isAuthBusy} aria-label="Log out" title="Log out">
               <LogOut size={19} strokeWidth={2.2} aria-hidden="true" />
             </button>
           ) : (
@@ -117,6 +119,23 @@ function App() {
               <LogIn size={19} strokeWidth={2.2} aria-hidden="true" />
             </button>
           )}
+        </div>
+      ) : null}
+
+      {isLogoutConfirmOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsLogoutConfirmOpen(false)}>
+          <section className="confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm logout" onMouseDown={(event) => event.stopPropagation()}>
+            <h2>Leave owner mode?</h2>
+            <p>You will be signed out and editing controls will be hidden.</p>
+            <div className="confirm-actions">
+              <button className="quiet-button" type="button" onClick={() => setIsLogoutConfirmOpen(false)}>
+                Stay
+              </button>
+              <button className="primary-button danger-action" type="button" onClick={logoutOwner} disabled={isAuthBusy}>
+                {isAuthBusy ? 'Leaving...' : 'Leave'}
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>

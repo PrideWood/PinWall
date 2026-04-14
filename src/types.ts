@@ -31,6 +31,17 @@ export type DragState =
       startY: number
     }
   | {
+      type: 'rotate'
+      noteId: string
+      pointerId: number
+      startClientX: number
+      startClientY: number
+      centerX: number
+      centerY: number
+      startAngle: number
+      startRotation: number
+    }
+  | {
       type: 'wall'
       pointerId: number
       startClientX: number
