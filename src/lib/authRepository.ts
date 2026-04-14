@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { getMissingSupabaseEnvVars, hasSupabaseConfig, supabase } from './supabase'
 
 const requireSupabase = () => {
@@ -25,6 +25,43 @@ export const onOwnerSessionChange = (callback: (session: Session | null) => void
   const {
     data: { subscription },
   } = client.auth.onAuthStateChange((_event, session) => callback(session))
+
+  return () => subscription.unsubscribe()
+}
+
+// Password reset flow: Supabase redirects recovery links back to /update-password.
+// Use the current origin so local dev, preview deploys, and production domains do not hardcode localhost.
+export const getPasswordResetRedirectUrl = () => `${window.location.origin}/update-password`
+
+export const sendPasswordResetEmail = async (email: string) => {
+  const client = requireSupabase()
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: getPasswordResetRedirectUrl(),
+  })
+
+  if (error) {
+    throw new Error(`Could not send reset email. ${error.message}`)
+  }
+}
+
+export const updateOwnerPassword = async (password: string) => {
+  const client = requireSupabase()
+  const { error } = await client.auth.updateUser({ password })
+
+  if (error) {
+    throw new Error(`Could not update password. ${error.message}`)
+  }
+}
+
+export const onPasswordRecoverySession = (callback: (session: Session | null) => void) => {
+  const client = requireSupabase()
+  const {
+    data: { subscription },
+  } = client.auth.onAuthStateChange((event: AuthChangeEvent, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      callback(session)
+    }
+  })
 
   return () => subscription.unsubscribe()
 }

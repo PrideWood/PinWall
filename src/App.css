@@ -1,7 +1,22 @@
+@font-face {
+  font-family: "PinWall Excalifont";
+  src: url("/fonts/Excalifont-Regular.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "PinWall Xiaolai";
+  src: url("/fonts/Xiaolai-Regular.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
 .workspace-shell {
   min-height: 100svh;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  position: relative;
   background:
     linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.12)),
     repeating-linear-gradient(90deg, rgba(78, 54, 30, 0.038) 0 1px, transparent 1px 42px),
@@ -9,55 +24,54 @@
     linear-gradient(112deg, #d9c49a, #cfba91 48%, #d7c19a);
 }
 
-.workspace-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 18px;
-  background: rgba(255, 253, 246, 0.42);
-  border-bottom: 1px solid rgba(57, 48, 35, 0.12);
-  position: relative;
-  z-index: 300;
-}
-
-.workspace-name {
-  color: #2a261f;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.workspace-tabs {
-  display: flex;
-  gap: 8px;
-}
-
-.workspace-tabs button {
-  min-height: 36px;
-  padding: 8px 13px;
-  color: #2f342f;
-  background: rgba(255, 253, 246, 0.68);
-  border: 1px solid rgba(57, 48, 35, 0.2);
-  border-radius: 8px;
-  box-shadow: 0 5px 14px rgba(61, 43, 26, 0.08);
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.workspace-tabs button.is-active {
-  color: #fffef8;
-  background: #2f6f63;
-  border-color: rgba(17, 61, 54, 0.3);
-}
-
 .surface-slot {
-  min-height: 0;
+  min-height: 100svh;
+  height: 100svh;
 }
 
 .surface-slot > .pinwall-shell {
-  height: 100%;
+  height: 100svh;
   min-height: 0;
+}
+
+.floating-control-stack {
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 118px);
+  z-index: 180;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mode-switch-bubble,
+.auth-float-bubble {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: #2f342f;
+  background: rgba(255, 253, 246, 0.78);
+  border: 1px solid rgba(57, 48, 35, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(31, 25, 18, 0.16);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.mode-switch-bubble:hover,
+.auth-float-bubble:hover {
+  background: rgba(255, 253, 246, 0.92);
+  box-shadow: 0 12px 28px rgba(31, 25, 18, 0.2);
+}
+
+.auth-float-bubble {
+  box-shadow: 0 10px 24px rgba(31, 25, 18, 0.16);
+}
+
+.auth-float-bubble:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .pinwall-shell {
@@ -74,10 +88,10 @@
 
 .topbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 360px) auto;
-  gap: 18px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 14px;
   align-items: center;
-  padding: 18px 22px;
+  padding: 14px 18px;
   background: transparent;
   position: sticky;
   top: 0;
@@ -109,7 +123,12 @@
 }
 
 .search-box {
-  display: block;
+  position: relative;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 8px;
+  transition: width 180ms ease;
 }
 
 .search-box input,
@@ -132,6 +151,51 @@
   padding: 8px 11px;
 }
 
+.search-box input {
+  opacity: 0;
+  pointer-events: none;
+  min-height: 32px;
+  padding: 5px 32px 5px 10px;
+  font-size: 0.92rem;
+  background: rgba(255, 253, 246, 0.72);
+  transition: opacity 140ms ease, background 180ms ease;
+}
+
+.search-box.is-active,
+.search-box:focus-within {
+  width: 260px;
+}
+
+.search-box.is-active input,
+.search-box:focus-within input {
+  opacity: 1;
+  pointer-events: auto;
+  background: rgba(255, 253, 246, 0.82);
+}
+
+.search-toggle {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  color: #2f342f;
+  background: rgba(255, 253, 246, 0.68);
+  border: 1px solid rgba(57, 48, 35, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 5px 14px rgba(61, 43, 26, 0.08);
+}
+
+.search-box.is-active .search-toggle,
+.search-box:focus-within .search-toggle {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .admin-entry {
   display: flex;
   gap: 8px;
@@ -151,7 +215,8 @@
 
 .topbar button,
 .modal-backdrop button,
-.note-tools button {
+.note-tools button,
+.auth-page-shell button {
   border: 0;
   border-radius: 8px;
   font: inherit;
@@ -161,9 +226,19 @@
 
 .topbar button:disabled,
 .modal-backdrop button:disabled,
-.note-tools button:disabled {
+.note-tools button:disabled,
+.auth-page-shell button:disabled {
   cursor: not-allowed;
   opacity: 0.62;
+}
+
+.search-toggle {
+  border: 1px solid rgba(57, 48, 35, 0.2);
+}
+
+.search-box.is-active .search-toggle,
+.search-box:focus-within .search-toggle {
+  border-color: transparent;
 }
 
 .primary-button,
@@ -187,6 +262,26 @@
 
 .quiet-button.danger {
   color: #8d2335;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  line-height: 1;
+}
+
+.login-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.admin-entry > button {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  width: 32px;
 }
 
 .wall-viewport {
@@ -223,7 +318,6 @@
   text-align: left;
   cursor: pointer;
   user-select: none;
-  font-family: "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
   box-shadow:
     0 1px 1px rgba(255, 255, 255, 0.72) inset,
     0 14px 18px rgba(66, 45, 24, 0.22),
@@ -300,7 +394,8 @@
   margin: 8px 0 0;
   font-size: 23px;
   line-height: 1.08;
-  font-weight: 700;
+  font-family: "PinWall Excalifont", "PinWall Xiaolai", "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+  font-weight: 400;
   position: relative;
   z-index: 1;
 }
@@ -311,6 +406,7 @@
   overflow: hidden;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
+  font-family: "PinWall Excalifont", "PinWall Xiaolai", "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
   font-size: 17px;
   line-height: 1.46;
   position: relative;
@@ -332,16 +428,39 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: auto;
+  opacity: 0;
+  pointer-events: none;
   position: relative;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease;
   z-index: 1;
 }
 
+.sticky-note:hover .note-tools,
+.sticky-note:focus-within .note-tools {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
 .note-tools button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 26px;
   padding: 5px 7px;
   color: #2a261f;
   background: rgba(255, 253, 246, 0.58);
   border: 1px solid rgba(72, 53, 30, 0.16);
   font-size: 12px;
+}
+
+@media (hover: none) {
+  .note-tools {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
 }
 
 .wall-state-note {
@@ -412,12 +531,59 @@
 }
 
 .login-modal {
-  width: min(420px, 100%);
+  width: min(390px, 100%);
+  padding: 24px;
+  color: #27231b;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.38), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 7px),
+    #fff7cf;
+  border-radius: 8px;
+  box-shadow: 0 28px 60px rgba(34, 25, 16, 0.38);
+}
+
+.confirm-modal {
+  width: min(360px, 100%);
   padding: 22px;
   color: #27231b;
   background: #fff7cf;
   border-radius: 8px;
   box-shadow: 0 28px 60px rgba(34, 25, 16, 0.38);
+  text-align: left;
+}
+
+.confirm-modal h2,
+.confirm-modal p,
+.owner-login-hint {
+  margin: 0;
+}
+
+.confirm-modal p,
+.owner-login-hint {
+  color: #5b513e;
+  line-height: 1.5;
+}
+
+.owner-login-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.owner-login-heading .brand-pin {
+  flex: 0 0 auto;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.danger-action {
+  background: #8d2335;
+  box-shadow: 0 6px 14px rgba(141, 35, 53, 0.18);
 }
 
 .modal-actions {
@@ -429,7 +595,13 @@
 
 .markdown-body {
   text-align: left;
-  font-family: "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+  font-family: "PinWall Excalifont", "PinWall Xiaolai", "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+}
+
+.editor-pane textarea {
+  font-family: "PinWall Excalifont", "PinWall Xiaolai", "Segoe Print", "Comic Sans MS", "LXGW WenKai", "Kaiti SC", "STKaiti", cursive;
+  font-size: 17px;
+  line-height: 1.5;
 }
 
 .markdown-body h2 {
@@ -474,12 +646,121 @@
 
 .owner-login-form {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   text-align: left;
 }
 
 .owner-login-form h2 {
   margin: 0;
+}
+
+.link-button {
+  justify-self: start;
+  min-height: 0;
+  padding: 0;
+  color: #245f56;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.92rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-page-shell {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  color: #22201b;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.12)),
+    repeating-linear-gradient(90deg, rgba(78, 54, 30, 0.038) 0 1px, transparent 1px 42px),
+    repeating-linear-gradient(0deg, rgba(78, 54, 30, 0.032) 0 1px, transparent 1px 38px),
+    linear-gradient(112deg, #d9c49a, #cfba91 48%, #d7c19a);
+}
+
+.auth-card {
+  width: min(520px, 100%);
+  padding: 26px;
+  color: #27231b;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.38), transparent 34%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 7px),
+    #fff7cf;
+  border: 1px solid rgba(96, 73, 36, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 28px 60px rgba(34, 25, 16, 0.32);
+}
+
+.auth-card-copy {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.auth-card-copy .brand-pin {
+  margin-bottom: 2px;
+}
+
+.auth-card h1,
+.auth-card p {
+  margin: 0;
+}
+
+.auth-card h1 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.auth-card p {
+  color: #5b513e;
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid rgba(57, 48, 35, 0.24);
+  border-radius: 8px;
+  color: #2a261f;
+  background: rgba(255, 253, 246, 0.94);
+  font: inherit;
+}
+
+.auth-message {
+  padding: 10px 12px;
+  color: #245f56;
+  background: rgba(205, 242, 202, 0.5);
+  border: 1px solid rgba(47, 111, 99, 0.18);
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.auth-message.is-error {
+  color: #8d2335;
+  background: rgba(255, 209, 220, 0.55);
+  border-color: rgba(141, 35, 53, 0.18);
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .owner-login-form label {
@@ -560,16 +841,6 @@
 }
 
 @media (max-width: 780px) {
-  .workspace-nav {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 10px 13px;
-  }
-
-  .workspace-tabs button {
-    flex: 1;
-  }
-
   .pinwall-shell {
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
@@ -588,8 +859,32 @@
     justify-content: stretch;
   }
 
+  .admin-entry .search-box {
+    margin-left: auto;
+  }
+
   .admin-entry button {
     flex: 1;
+  }
+
+  .admin-entry .login-button {
+    flex: 0 0 auto;
+  }
+
+  .search-box.is-active,
+  .search-box:focus-within {
+    width: min(260px, 100%);
+  }
+
+  .floating-control-stack {
+    left: max(14px, env(safe-area-inset-left, 0px));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 106px);
+  }
+
+  .mode-switch-bubble,
+  .auth-float-bubble {
+    width: 40px;
+    height: 40px;
   }
 
   .status-strip {
@@ -615,5 +910,18 @@
     padding-bottom: 8px;
     background: #fff7cf;
     flex-wrap: wrap;
+  }
+
+  .auth-page-shell {
+    padding: 12px;
+  }
+
+  .auth-card {
+    padding: 22px;
+  }
+
+  .auth-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
   }
 }

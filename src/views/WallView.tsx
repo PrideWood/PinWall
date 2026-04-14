@@ -2,17 +2,18 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
+import { BringToFront, RotateCcwSquare, RotateCwSquare, Search, SquarePen, X } from 'lucide-react'
 import '../App.css'
 import type { Session } from '@supabase/supabase-js'
-import { getOwnerSession, onOwnerSessionChange, signInOwner, signOutOwner } from '../lib/authRepository'
-import { createNote, deleteNote, loadNotes, updateNote } from '../lib/notesRepository'
+import { signInOwner } from '../lib/authRepository'
+import { createNote, deleteNote, loadNotes, updateNote, updateNotePosition } from '../lib/notesRepository'
 import type { DragState, NoteDraft, PinNote } from '../types'
 
 const minimumWallSize = { width: 2200, height: 1400 }
 const wallPadding = { x: 720, y: 480 }
 const dragThreshold = 6
 const noteColors = ['#fff2a8', '#ffd1dc', '#cdf2ca', '#cde7ff', '#f5d6ff']
-
+const ownerLoginEmail = 'boquanchai@gmail.com'
 const emptyDraft = (zIndex: number): NoteDraft => ({
   title: '',
   content: '',
@@ -53,20 +54,32 @@ const matchesSearch = (note: PinNote, query: string) => {
     .includes(normalized)
 }
 
-export function WallView() {
+type WallViewProps = {
+  authNotice: string
+  ownerSession: Session | null
+  shouldOpenLogin: boolean
+  onAuthNotice: (notice: string) => void
+  onForgotPassword: () => void
+  onLoginRequestHandled: () => void
+  onOwnerSessionChange: (session: Session | null) => void
+}
+
+export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNotice, onForgotPassword, onLoginRequestHandled, onOwnerSessionChange }: WallViewProps) {
   const wallRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const dragMovedRef = useRef(false)
+  const dragStartNoteRef = useRef<PinNote | null>(null)
   const suppressNextClickRef = useRef(false)
   const [notes, setNotes] = useState<PinNote[]>([])
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState<NoteDraft | null>(null)
   const [query, setQuery] = useState('')
-  const [ownerSession, setOwnerSession] = useState<Session | null>(null)
   const [isLoginOpen, setIsLoginOpen] = useState(false)
-  const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerPassword, setOwnerPassword] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [notice, setNotice] = useState('Loading the wall...')
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -95,32 +108,6 @@ export function WallView() {
   })
 
   useEffect(() => {
-    getOwnerSession()
-      .then((session) => {
-        setOwnerSession(session)
-        if (session) {
-          setNotice('Owner mode is on. Move notes directly on the wall.')
-        }
-      })
-      .catch((error: Error) => {
-        setNotice(error.message)
-      })
-
-    try {
-      return onOwnerSessionChange((session) => {
-        setOwnerSession(session)
-
-        if (!session) {
-          setIsEditing(false)
-          setDraft(null)
-        }
-      })
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not watch owner session.')
-    }
-  }, [])
-
-  useEffect(() => {
     loadNotes()
       .then((loadedNotes) => {
         setNotes(loadedNotes)
@@ -134,6 +121,29 @@ export function WallView() {
         setIsLoading(false)
       })
   }, [])
+
+  useEffect(() => {
+    if (ownerSession) {
+      setNotice('Owner mode is on. Move notes directly on the wall.')
+      return
+    }
+
+    setIsEditing(false)
+    setDraft(null)
+  }, [ownerSession])
+
+  useEffect(() => {
+    if (authNotice) {
+      setNotice(authNotice)
+    }
+  }, [authNotice])
+
+  useEffect(() => {
+    if (!shouldOpenLogin || ownerSession) return
+
+    setIsLoginOpen(true)
+    onLoginRequestHandled()
+  }, [onLoginRequestHandled, ownerSession, shouldOpenLogin])
 
   useEffect(() => {
     if (!wallRef.current) return
@@ -151,7 +161,14 @@ export function WallView() {
     return () => resizeObserver.disconnect()
   }, [])
 
-  const persistNote = async (note: PinNote) => {
+  const persistNote = async (
+    note: PinNote,
+    options: {
+      rollbackNote?: PinNote
+      successNotice?: string
+      failureNotice?: string
+    } = {},
+  ) => {
     if (!ownerSession) {
       setNotice('Log in as owner before changing notes.')
       return
@@ -162,9 +179,69 @@ export function WallView() {
     try {
       const saved = await updateNote(note)
       setNotes((current) => current.map((item) => (item.id === saved.id ? saved : item)))
-      setNotice('Saved to the wall.')
+      setNotice(options.successNotice ?? 'Saved to the wall.')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not save this note.')
+      const rollbackNote = options.rollbackNote
+
+      if (rollbackNote) {
+        setNotes((current) => current.map((item) => (item.id === rollbackNote.id ? rollbackNote : item)))
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Could not save this note.'
+      setNotice(options.failureNotice ? `${options.failureNotice} ${errorMessage}` : errorMessage)
+    }
+  }
+
+  const persistNotePosition = async (note: PinNote, originalNote: PinNote) => {
+    if (!ownerSession) {
+      setNotice('Log in as owner before moving notes.')
+      return
+    }
+
+    if (note.owner_id && note.owner_id !== ownerSession.user.id) {
+      console.warn('[PinWall drag] owner mismatch before position update', {
+        draggedNoteId: note.id,
+        noteOwnerId: note.owner_id,
+        sessionUserId: ownerSession.user.id,
+      })
+      setNotice('Could not save the new position. This note is not owned by the current signed-in user.')
+      return
+    }
+
+    console.info('[PinWall drag] final note position', {
+      draggedNoteId: note.id,
+      x: note.x,
+      y: note.y,
+      rotation: note.rotation,
+      z_index: note.z_index,
+    })
+
+    setNotes((current) => current.map((item) => (item.id === note.id ? note : item)))
+
+    try {
+      const saved = await updateNotePosition(note)
+      setNotes((current) => current.map((item) => (item.id === saved.id ? saved : item)))
+      setNotice('Saved position to the wall.')
+    } catch (error) {
+      console.error('[PinWall drag] position persistence failed', {
+        draggedNoteId: note.id,
+        attemptedPosition: {
+          x: note.x,
+          y: note.y,
+          rotation: note.rotation,
+          z_index: note.z_index,
+        },
+        originalPosition: {
+          x: originalNote.x,
+          y: originalNote.y,
+          rotation: originalNote.rotation,
+          z_index: originalNote.z_index,
+        },
+        error,
+      })
+
+      const errorMessage = error instanceof Error ? error.message : 'Could not save the new position.'
+      setNotice(`Could not save the new position. ${errorMessage}`)
     }
   }
 
@@ -181,6 +258,10 @@ export function WallView() {
     }
 
     openNote(note)
+  }
+
+  const stopNoteToolEvent = (event: React.SyntheticEvent) => {
+    event.stopPropagation()
   }
 
   const startNewNote = () => {
@@ -264,6 +345,7 @@ export function WallView() {
     if (event.target !== event.currentTarget) return
 
     dragMovedRef.current = false
+    dragStartNoteRef.current = null
     setDragState({
       type: 'wall',
       pointerId: event.pointerId,
@@ -281,6 +363,7 @@ export function WallView() {
 
     event.stopPropagation()
     dragMovedRef.current = false
+    dragStartNoteRef.current = note
     setDragState({
       type: 'note',
       noteId: note.id,
@@ -329,11 +412,24 @@ export function WallView() {
     if (!dragState || event.pointerId !== dragState.pointerId) return
 
     if (dragState.type === 'note' && dragMovedRef.current) {
-      const draggedNote = notes.find((note) => note.id === dragState.noteId)
-      if (draggedNote) void persistNote(draggedNote)
+      const draggedNote = dragStartNoteRef.current
+
+      if (draggedNote) {
+        const deltaX = event.clientX - dragState.startClientX
+        const deltaY = event.clientY - dragState.startClientY
+        const nextNote = {
+          ...draggedNote,
+          x: Math.max(0, Math.min(wallSize.width - draggedNote.width, dragState.startX + deltaX)),
+          y: Math.max(0, Math.min(wallSize.height - draggedNote.height, dragState.startY + deltaY)),
+        }
+
+        void persistNotePosition(nextNote, draggedNote)
+      }
+
       suppressNextClickRef.current = true
     }
 
+    dragStartNoteRef.current = null
     setDragState(null)
   }
 
@@ -341,11 +437,11 @@ export function WallView() {
     setIsAuthBusy(true)
 
     try {
-      const session = await signInOwner(ownerEmail.trim(), ownerPassword)
-      setOwnerSession(session)
+      const session = await signInOwner(ownerLoginEmail, ownerPassword)
+      onOwnerSessionChange(session)
       setIsLoginOpen(false)
-      setOwnerEmail('')
       setOwnerPassword('')
+      onAuthNotice('')
       setNotice('Owner mode is on. Move notes directly on the wall.')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Owner login failed.')
@@ -354,24 +450,17 @@ export function WallView() {
     }
   }
 
-  const logoutOwner = async () => {
-    setIsAuthBusy(true)
-
-    try {
-      await signOutOwner()
-      setOwnerSession(null)
-      setNotice('Owner mode is off.')
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not sign out.')
-    } finally {
-      setIsAuthBusy(false)
-    }
+  const openForgotPassword = () => {
+    setIsLoginOpen(false)
+    setOwnerPassword('')
+    onForgotPassword()
   }
 
   const closeModal = () => {
     setSelectedNoteId(null)
     setIsEditing(false)
     setDraft(null)
+    setIsDeleteConfirmOpen(false)
   }
 
   return (
@@ -384,35 +473,32 @@ export function WallView() {
           </div>
         </div>
 
-        <div className="search-box">
-          <input
-            aria-label="Search notes"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && matchingNotes[0]) openNote(matchingNotes[0])
-            }}
-            placeholder="search"
-          />
-        </div>
-
         <div className="admin-entry">
+          <div className={`search-box ${isSearchFocused || hasQuery ? 'is-active' : ''}`}>
+            <button className="search-toggle" type="button" aria-label="Search notes" title="Search notes" onClick={() => searchInputRef.current?.focus()}>
+              <Search size={16} strokeWidth={2.1} aria-hidden="true" />
+            </button>
+            <input
+              ref={searchInputRef}
+              aria-label="Search notes"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && matchingNotes[0]) openNote(matchingNotes[0])
+              }}
+              placeholder="search"
+            />
+          </div>
           {isAdmin ? (
             <>
-              <span className="owner-badge">{ownerSession?.user.email ?? 'Owner'}</span>
-              <button className="quiet-button" onClick={logoutOwner} disabled={isAuthBusy}>
-                Leave admin
-              </button>
-              <button className="primary-button" onClick={startNewNote}>
-                New note
+              <button className="primary-button icon-button" onClick={startNewNote} aria-label="New note" title="New note">
+                <SquarePen size={16} strokeWidth={2.1} aria-hidden="true" />
               </button>
             </>
-          ) : (
-            <button className="quiet-button login-button" onClick={() => setIsLoginOpen(true)}>
-              Login
-            </button>
-          )}
+          ) : null}
         </div>
       </header>
 
@@ -457,10 +543,47 @@ export function WallView() {
                 {note.tags.length > 0 ? <div className="tag-line">{note.tags.map((tag) => `#${tag}`).join(' ')}</div> : null}
 
                 {isAdmin ? (
-                  <div className="note-tools" aria-label="Admin note tools">
-                    <button onClick={() => rotateNote(note, -2)}>Rotate left</button>
-                    <button onClick={() => rotateNote(note, 2)}>Rotate right</button>
-                    <button onClick={() => bringForward(note)}>Forward</button>
+                  <div
+                    className="note-tools"
+                    aria-label="Admin note tools"
+                    onClick={stopNoteToolEvent}
+                    onMouseUp={stopNoteToolEvent}
+                    onPointerDown={stopNoteToolEvent}
+                    onPointerUp={stopNoteToolEvent}
+                  >
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        stopNoteToolEvent(event)
+                        rotateNote(note, -2)
+                      }}
+                      aria-label="Rotate left"
+                      title="Rotate left"
+                    >
+                      <RotateCcwSquare size={14} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        stopNoteToolEvent(event)
+                        rotateNote(note, 2)
+                      }}
+                      aria-label="Rotate right"
+                      title="Rotate right"
+                    >
+                      <RotateCwSquare size={14} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        stopNoteToolEvent(event)
+                        bringForward(note)
+                      }}
+                      aria-label="Bring to front"
+                      title="Bring to front"
+                    >
+                      <BringToFront size={14} strokeWidth={2} aria-hidden="true" />
+                    </button>
                   </div>
                 ) : null}
               </article>
@@ -497,7 +620,7 @@ export function WallView() {
                 Close
               </button>
               {isAdmin && selectedNote ? (
-                <button className="quiet-button danger" onClick={removeSelectedNote}>
+                <button className="quiet-button danger" onClick={() => setIsDeleteConfirmOpen(true)}>
                   Delete
                 </button>
               ) : null}
@@ -558,8 +681,8 @@ export function WallView() {
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsLoginOpen(false)}>
           <section className="login-modal" role="dialog" aria-modal="true" aria-label="Owner login" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-actions">
-              <button className="quiet-button" onClick={() => setIsLoginOpen(false)}>
-                Close
+              <button className="quiet-button icon-button" onClick={() => setIsLoginOpen(false)} aria-label="Close" title="Close">
+                <X size={16} strokeWidth={2.1} aria-hidden="true" />
               </button>
             </div>
             <form
@@ -569,23 +692,17 @@ export function WallView() {
                 void loginOwner()
               }}
             >
-              <h2>Owner login</h2>
-              <label>
-                Email
-                <input
-                  autoFocus
-                  aria-label="Owner email"
-                  type="email"
-                  value={ownerEmail}
-                  onChange={(event) => setOwnerEmail(event.target.value)}
-                  placeholder="owner@example.com"
-                  autoComplete="email"
-                  required
-                />
-              </label>
+              <div className="owner-login-heading">
+                <span className="brand-pin" aria-hidden="true" />
+                <div>
+                  <h2>Owner login</h2>
+                  <p className="owner-login-hint">Wesley</p>
+                </div>
+              </div>
               <label>
                 Password
                 <input
+                  autoFocus
                   aria-label="Owner password"
                   type="password"
                   value={ownerPassword}
@@ -598,7 +715,27 @@ export function WallView() {
               <button className="primary-button" type="submit" disabled={isAuthBusy}>
                 {isAuthBusy ? 'Signing in...' : 'Enter'}
               </button>
+              <button className="link-button" type="button" onClick={openForgotPassword}>
+                Forgot password?
+              </button>
             </form>
+          </section>
+        </div>
+      ) : null}
+
+      {isDeleteConfirmOpen && selectedNote ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsDeleteConfirmOpen(false)}>
+          <section className="confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm note deletion" onMouseDown={(event) => event.stopPropagation()}>
+            <h2>Delete this note?</h2>
+            <p>This will remove the sticky note from the wall. Are you sure?</p>
+            <div className="confirm-actions">
+              <button className="quiet-button" onClick={() => setIsDeleteConfirmOpen(false)}>
+                Keep it
+              </button>
+              <button className="primary-button danger-action" onClick={removeSelectedNote}>
+                Delete
+              </button>
+            </div>
           </section>
         </div>
       ) : null}

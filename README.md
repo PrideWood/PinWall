@@ -110,6 +110,13 @@ VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 6. Make sure the `boards` table has a `main` row for the Board scene and that its `owner_id` is the owner Auth user id.
 7. Do not add service-role keys or other server-only secrets to Vite environment variables.
 
+Password reset uses Supabase Auth recovery links. In Supabase, configure:
+
+- **Authentication -> URL Configuration -> Site URL:** your deployed site origin, for example `https://your-domain.com`
+- **Redirect URLs:** add your local and deployed update-password routes, for example:
+  - `http://localhost:5173/update-password`
+  - `https://your-domain.com/update-password`
+
 Required public-read policy:
 
 ```sql
@@ -204,3 +211,12 @@ npm run dev
 ```
 
 The Wall expects Supabase env vars for note loading. The Board uses the same Supabase client for the `boards` table. Without env vars, the app shows visible error states instead of silently falling back to mock data.
+
+Password reset local test flow:
+
+1. Start the Vite dev server.
+2. Open the Wall login dialog and choose **Forgot password?**
+3. Request a reset email for the owner account.
+4. Open the email link. It should return to `/update-password`.
+5. Enter matching passwords with at least 8 characters.
+6. Return to Wall login and sign in with the new password.

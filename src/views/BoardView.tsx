@@ -59,7 +59,26 @@ export function BoardView() {
   const queuedSceneSignatureRef = useRef<string | null>(null)
   const pendingSceneRef = useRef<PendingSceneSave | null>(null)
   const saveTimerRef = useRef<number | null>(null)
+  const savedStatusTimerRef = useRef<number | null>(null)
   const isMountedRef = useRef(true)
+
+  const setBoardSaveStatus = useCallback((nextStatus: SaveStatus) => {
+    if (savedStatusTimerRef.current) {
+      window.clearTimeout(savedStatusTimerRef.current)
+      savedStatusTimerRef.current = null
+    }
+
+    setSaveStatus(nextStatus)
+
+    if (nextStatus === 'saved') {
+      savedStatusTimerRef.current = window.setTimeout(() => {
+        savedStatusTimerRef.current = null
+        if (isMountedRef.current) {
+          setSaveStatus((currentStatus) => (currentStatus === 'saved' ? 'idle' : currentStatus))
+        }
+      }, 1600)
+    }
+  }, [])
 
   const persistScene = useCallback(async ({ scene, signature }: PendingSceneSave) => {
     const boardId = boardIdRef.current
@@ -70,13 +89,13 @@ export function BoardView() {
 
     if (!boardId) {
       if (isMountedRef.current) {
-        setSaveStatus('failed')
+        setBoardSaveStatus('failed')
       }
       return
     }
 
     if (isMountedRef.current) {
-      setSaveStatus('saving')
+      setBoardSaveStatus('saving')
     }
 
     try {
@@ -84,15 +103,15 @@ export function BoardView() {
       savedSceneSignatureRef.current = signature
       queuedSceneSignatureRef.current = null
       if (isMountedRef.current) {
-        setSaveStatus('saved')
+        setBoardSaveStatus('saved')
       }
     } catch {
       queuedSceneSignatureRef.current = null
       if (isMountedRef.current) {
-        setSaveStatus('failed')
+        setBoardSaveStatus('failed')
       }
     }
-  }, [])
+  }, [setBoardSaveStatus])
 
   const queueSceneSave = useCallback(
     (nextSave: PendingSceneSave) => {
@@ -140,13 +159,13 @@ export function BoardView() {
           savedSceneSignatureRef.current = getSceneSignature(loadedBoard.scene)
           queuedSceneSignatureRef.current = null
           setInitialScene(loadedBoard.scene)
-          setSaveStatus(ownerSessionRef.current ? 'saved' : 'idle')
+          setBoardSaveStatus(ownerSessionRef.current ? 'saved' : 'idle')
         }
       })
       .catch((error) => {
         if (isMountedRef.current) {
           setLoadError(error instanceof Error ? error.message : 'Could not load board scene.')
-          setSaveStatus('failed')
+          setBoardSaveStatus('failed')
         }
       })
 
@@ -158,6 +177,11 @@ export function BoardView() {
         saveTimerRef.current = null
       }
 
+      if (savedStatusTimerRef.current) {
+        window.clearTimeout(savedStatusTimerRef.current)
+        savedStatusTimerRef.current = null
+      }
+
       const pendingSave = pendingSceneRef.current
       const boardId = boardIdRef.current
       pendingSceneRef.current = null
@@ -166,7 +190,7 @@ export function BoardView() {
         void saveBoardScene(boardId, pendingSave.scene).catch(() => undefined)
       }
     }
-  }, [])
+  }, [setBoardSaveStatus])
 
   useEffect(() => {
     try {
@@ -175,9 +199,9 @@ export function BoardView() {
         setOwnerSession(session)
 
         if (!session) {
-          setSaveStatus('idle')
+          setBoardSaveStatus('idle')
         } else if (initialScene) {
-          setSaveStatus('saved')
+          setBoardSaveStatus('saved')
         }
       })
     } catch {
@@ -185,7 +209,7 @@ export function BoardView() {
         setLoadError('Could not watch owner session.')
       }, 0)
     }
-  }, [initialScene])
+  }, [initialScene, setBoardSaveStatus])
 
   const saveStatusLabel =
     saveStatus === 'saving' ? 'Saving...' : saveStatus === 'failed' ? 'Save failed' : saveStatus === 'saved' ? 'Saved' : ''

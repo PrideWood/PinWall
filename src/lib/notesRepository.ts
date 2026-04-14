@@ -7,6 +7,14 @@ type SupabaseNoteRow = Partial<Omit<PinNote, 'tags'>> & {
   tags: string | string[] | null
 }
 
+type NotePositionPayload = {
+  x: number
+  y: number
+  rotation: number
+  z_index: number
+  updated_at: string
+}
+
 const now = () => new Date().toISOString()
 const fallbackColor = '#fff2a8'
 
@@ -75,19 +83,65 @@ const normalizeNote = (row: SupabaseNoteRow): PinNote => ({
 
 const serializeTags = (tags: string[]) => tags.map((tag) => tag.trim()).filter(Boolean).join(', ')
 
+const toStrictNumber = (value: unknown, fieldName: string) => {
+  const parsed = Number(value)
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid note payload: ${fieldName} must be a finite number.`)
+  }
+
+  return parsed
+}
+
+const toInteger = (value: unknown, fieldName: string) => Math.round(toStrictNumber(value, fieldName))
+
 const toNotePayload = (note: NoteDraft | PinNote) => ({
   title: note.title?.trim() || null,
   content: note.content,
   tags: serializeTags(note.tags),
-  x: note.x,
-  y: note.y,
-  z_index: note.z_index,
-  rotation: note.rotation,
-  width: note.width,
-  height: note.height,
+  x: toInteger(note.x, 'x'),
+  y: toInteger(note.y, 'y'),
+  z_index: toInteger(note.z_index, 'z_index'),
+  rotation: toStrictNumber(note.rotation, 'rotation'),
+  width: toInteger(note.width, 'width'),
+  height: toInteger(note.height, 'height'),
   color: note.color,
   is_public: note.is_public,
 })
+
+const toNotePositionPayload = (note: Pick<PinNote, 'x' | 'y' | 'rotation' | 'z_index'>): NotePositionPayload => ({
+  x: toInteger(note.x, 'x'),
+  y: toInteger(note.y, 'y'),
+  rotation: toStrictNumber(note.rotation, 'rotation'),
+  z_index: toInteger(note.z_index, 'z_index'),
+  updated_at: now(),
+})
+
+const describeSupabaseError = (error: unknown) => {
+  if (!error || typeof error !== 'object') {
+    return String(error)
+  }
+
+  const supabaseError = error as {
+    code?: string
+    message?: string
+    details?: string
+    hint?: string
+    name?: string
+  }
+
+  return JSON.stringify(
+    {
+      name: supabaseError.name,
+      code: supabaseError.code,
+      message: supabaseError.message,
+      details: supabaseError.details,
+      hint: supabaseError.hint,
+    },
+    null,
+    2,
+  )
+}
 
 const getMissingNoteColumns = async (client: NonNullable<typeof supabase>) => {
   const checks = await Promise.all(
@@ -123,6 +177,11 @@ export async function loadNotes(): Promise<PinNote[]> {
 
   const { data, error } = await supabase.from('notes').select(selectColumns).eq('is_public', true).order('z_index')
 
+  console.info('[PinWall notes] load result', {
+    count: data?.length ?? 0,
+    error,
+  })
+
   if (error) {
     throw error
   }
@@ -156,10 +215,53 @@ export async function updateNote(note: PinNote): Promise<PinNote> {
     throw new Error(`Missing ${getMissingSupabaseEnvVars().join(' and ')}.`)
   }
 
-  const { data, error } = await supabase.from('notes').update(toNotePayload(note)).eq('id', note.id).select(selectColumns).single()
+  const payload = toNotePayload(note)
+  const { data, error } = await supabase.from('notes').update(payload).eq('id', note.id).select(selectColumns).single()
 
   if (error) {
     throw new Error(`Could not update this note. ${error.message}`)
+  }
+
+  return normalizeNote(data as unknown as SupabaseNoteRow)
+}
+
+export async function updateNotePosition(note: PinNote): Promise<PinNote> {
+  if (!hasSupabaseConfig || !supabase) {
+    throw new Error(`Missing ${getMissingSupabaseEnvVars().join(' and ')}.`)
+  }
+
+  if (!note.id) {
+    throw new Error('Could not update this note position. Missing note id.')
+  }
+
+  const payload = toNotePositionPayload(note)
+  const query = {
+    table: 'notes',
+    match: { id: note.id },
+    returning: selectColumns,
+  }
+
+  console.info('[PinWall notes] position update request', {
+    id: note.id,
+    query,
+    payload,
+  })
+
+  const { data, error } = await supabase.from('notes').update(payload).eq('id', note.id).select(selectColumns).maybeSingle()
+
+  console.info('[PinWall notes] position update result', {
+    id: note.id,
+    data,
+    error,
+  })
+
+  if (error) {
+    console.error('[PinWall notes] position update full error', error)
+    throw new Error(`Could not update this note position. ${describeSupabaseError(error)}`)
+  }
+
+  if (!data) {
+    throw new Error('Could not update this note position. Supabase returned no row for this note id. Check that the note id exists and that the current owner matches owner_id.')
   }
 
   return normalizeNote(data as unknown as SupabaseNoteRow)
