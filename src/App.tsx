@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type FocusEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { ArrowRightLeft, LogIn, LogOut } from 'lucide-react'
+import { ArrowLeftRight, LogIn, LogOut } from 'lucide-react'
 import './App.css'
 import { getOwnerSession, onOwnerSessionChange, signOutOwner } from './lib/authRepository'
 import { BoardView } from './views/BoardView'
@@ -25,8 +25,10 @@ function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
+  const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
   const [shouldOpenWallLogin, setShouldOpenWallLogin] = useState(false)
-  const isSurfaceRoute = route === 'wall' || route === 'board'
+  const [wallResetToken, setWallResetToken] = useState(0)
+  const workspaceMenuCloseTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     const handlePopState = () => setRoute(getRouteFromPath())
@@ -34,6 +36,23 @@ function App() {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
+
+  useEffect(() => {
+    setIsWorkspaceMenuOpen(false)
+
+    if (route === 'wall') {
+      setWallResetToken((current) => current + 1)
+    }
+  }, [route])
+
+  useEffect(
+    () => () => {
+      if (workspaceMenuCloseTimeoutRef.current) {
+        window.clearTimeout(workspaceMenuCloseTimeoutRef.current)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     getOwnerSession()
@@ -57,7 +76,13 @@ function App() {
   }
 
   const switchSurface = () => {
+    setIsWorkspaceMenuOpen(false)
     navigateToRoute(route === 'wall' ? 'board' : 'wall')
+  }
+
+  const switchToWall = () => {
+    setIsWorkspaceMenuOpen(false)
+    navigateToRoute('wall')
   }
 
   const openWallLogin = () => {
@@ -65,8 +90,35 @@ function App() {
   }
 
   const openFloatingLogin = () => {
+    setIsWorkspaceMenuOpen(false)
     setShouldOpenWallLogin(true)
     navigateToRoute('wall')
+  }
+
+  const requestLogout = () => {
+    setIsWorkspaceMenuOpen(false)
+    setIsLogoutConfirmOpen(true)
+  }
+
+  const closeWorkspaceMenuOnBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setIsWorkspaceMenuOpen(false)
+    }
+  }
+
+  const clearWorkspaceMenuCloseTimer = () => {
+    if (!workspaceMenuCloseTimeoutRef.current) return
+
+    window.clearTimeout(workspaceMenuCloseTimeoutRef.current)
+    workspaceMenuCloseTimeoutRef.current = null
+  }
+
+  const scheduleWorkspaceMenuClose = () => {
+    clearWorkspaceMenuCloseTimer()
+    workspaceMenuCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsWorkspaceMenuOpen(false)
+      workspaceMenuCloseTimeoutRef.current = null
+    }, 260)
   }
 
   const logoutOwner = async () => {
@@ -97,6 +149,7 @@ function App() {
         onForgotPassword={() => navigateToRoute('forgot-password')}
         onLoginRequestHandled={() => setShouldOpenWallLogin(false)}
         onOwnerSessionChange={setOwnerSession}
+        resetViewSignal={wallResetToken}
       />
     )
   }
@@ -105,21 +158,53 @@ function App() {
     <div className="workspace-shell">
       <div className="surface-slot">{renderRoute()}</div>
 
-      {isSurfaceRoute ? (
-        <div className="floating-control-stack" aria-label="Floating workspace controls">
-          <button className="mode-switch-bubble" type="button" onClick={switchSurface} aria-label={`Switch to ${route === 'wall' ? 'Board' : 'Wall'}`}>
-            <ArrowRightLeft size={19} strokeWidth={2.2} aria-hidden="true" />
+      {route === 'wall' ? (
+        <nav
+          className={`workspace-brand-nav is-${route}`}
+          aria-label="PinWall navigation"
+          onMouseEnter={clearWorkspaceMenuCloseTimer}
+          onMouseLeave={route === 'wall' ? scheduleWorkspaceMenuClose : undefined}
+          onBlur={closeWorkspaceMenuOnBlur}
+        >
+          <button
+            className="brand brand-trigger"
+            type="button"
+            onClick={() => setIsWorkspaceMenuOpen((current) => !current)}
+            aria-expanded={isWorkspaceMenuOpen}
+            aria-haspopup="menu"
+          >
+            <span className="brand-pin" aria-hidden="true" />
+            <div>
+              <h1>PinWall</h1>
+            </div>
           </button>
-          {ownerSession ? (
-            <button className="auth-float-bubble" type="button" onClick={() => setIsLogoutConfirmOpen(true)} disabled={isAuthBusy} aria-label="Log out" title="Log out">
-              <LogOut size={19} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-          ) : (
-            <button className="auth-float-bubble" type="button" onClick={openFloatingLogin} aria-label="Log in" title="Log in">
-              <LogIn size={19} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-          )}
-        </div>
+
+          {isWorkspaceMenuOpen ? (
+            <div className="workspace-menu" role="menu">
+              <button type="button" role="menuitem" onClick={switchSurface}>
+                <ArrowLeftRight size={15} strokeWidth={2.1} aria-hidden="true" />
+                <span>{route === 'wall' ? 'Board' : 'Wall'}</span>
+              </button>
+              {ownerSession ? (
+                <button type="button" role="menuitem" onClick={requestLogout} disabled={isAuthBusy}>
+                  <LogOut size={15} strokeWidth={2.1} aria-hidden="true" />
+                  <span>Log out</span>
+                </button>
+              ) : (
+                <button type="button" role="menuitem" onClick={openFloatingLogin}>
+                  <LogIn size={15} strokeWidth={2.1} aria-hidden="true" />
+                  <span>Log in</span>
+                </button>
+              )}
+            </div>
+          ) : null}
+        </nav>
+      ) : null}
+
+      {route === 'board' ? (
+        <button className="board-wall-switch" type="button" onClick={switchToWall} aria-label="Switch to Wall" title="Switch to Wall">
+          <ArrowLeftRight size={16} strokeWidth={2.05} aria-hidden="true" />
+        </button>
       ) : null}
 
       {isLogoutConfirmOpen ? (

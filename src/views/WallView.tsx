@@ -15,6 +15,8 @@ const dragThreshold = 6
 const minWallZoom = 0.75
 const maxWallZoom = 1.6
 const wheelZoomSensitivity = 0.0015
+const normalNoticeDurationMs = 1000
+const errorNoticeDurationMs = 12000
 const noteColors = ['#fff2a8', '#ffd1dc', '#cdf2ca', '#cde7ff', '#f5d6ff']
 const ownerLoginEmail = 'boquanchai@gmail.com'
 const emptyDraft = (zIndex: number): NoteDraft => ({
@@ -41,6 +43,8 @@ const normalizeRotation = (rotation: number) => {
 }
 
 const clampZoom = (zoom: number) => Math.max(minWallZoom, Math.min(maxWallZoom, zoom))
+
+const isErrorNotice = (message: string) => /could not|failed|error|invalid|expired/i.test(message)
 
 const noteToDraft = (note: PinNote): NoteDraft => ({
   title: note.title ?? '',
@@ -74,14 +78,25 @@ type WallViewProps = {
   onForgotPassword: () => void
   onLoginRequestHandled: () => void
   onOwnerSessionChange: (session: Session | null) => void
+  resetViewSignal: number
 }
 
-export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNotice, onForgotPassword, onLoginRequestHandled, onOwnerSessionChange }: WallViewProps) {
+export function WallView({
+  authNotice,
+  ownerSession,
+  shouldOpenLogin,
+  onAuthNotice,
+  onForgotPassword,
+  onLoginRequestHandled,
+  onOwnerSessionChange,
+  resetViewSignal,
+}: WallViewProps) {
   const wallRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const dragMovedRef = useRef(false)
   const dragStartNoteRef = useRef<PinNote | null>(null)
   const suppressNextClickRef = useRef(false)
+  const hasCenteredWallRef = useRef(false)
   const [notes, setNotes] = useState<PinNote[]>([])
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -94,6 +109,8 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   const [deleteTargetNoteId, setDeleteTargetNoteId] = useState<string | null>(null)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [notice, setNotice] = useState('Loading the wall...')
+  const [noticeVersion, setNoticeVersion] = useState(0)
+  const [isNoticeVisible, setIsNoticeVisible] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
@@ -117,52 +134,86 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     [viewportSize.height, viewportSize.width],
   )
 
+  const getCenteredWallOffset = useCallback(
+    (zoom = wallZoom) => ({
+      x: (viewportSize.width - wallSize.width * zoom) / 2,
+      y: (viewportSize.height - wallSize.height * zoom) / 2,
+    }),
+    [viewportSize.height, viewportSize.width, wallSize.height, wallSize.width, wallZoom],
+  )
+
   const clampWallOffset = useCallback(
     (nextOffset: { x: number; y: number }, zoom = wallZoom) => {
       const scaledWidth = wallSize.width * zoom
       const scaledHeight = wallSize.height * zoom
-      const minX = Math.min(0, viewportSize.width - scaledWidth)
-      const minY = Math.min(0, viewportSize.height - scaledHeight)
+      const centeredOffset = getCenteredWallOffset(zoom)
+      const horizontalPanLimit = Math.max(0, (scaledWidth - viewportSize.width) / 2)
+      const verticalPanLimit = Math.max(0, (scaledHeight - viewportSize.height) / 2)
+      const minX = centeredOffset.x - horizontalPanLimit
+      const maxX = centeredOffset.x + horizontalPanLimit
+      const minY = centeredOffset.y - verticalPanLimit
+      const maxY = centeredOffset.y + verticalPanLimit
 
       return {
-        x: Math.max(minX, Math.min(0, nextOffset.x)),
-        y: Math.max(minY, Math.min(0, nextOffset.y)),
+        x: Math.max(minX, Math.min(maxX, nextOffset.x)),
+        y: Math.max(minY, Math.min(maxY, nextOffset.y)),
       }
     },
-    [viewportSize.height, viewportSize.width, wallSize.height, wallSize.width, wallZoom],
+    [getCenteredWallOffset, viewportSize.height, viewportSize.width, wallSize.height, wallSize.width, wallZoom],
   )
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message)
+    setIsNoticeVisible(Boolean(message))
+    setNoticeVersion((current) => current + 1)
+  }, [])
 
   useEffect(() => {
     loadNotes()
       .then((loadedNotes) => {
         setNotes(loadedNotes)
-        setNotice(`Loaded ${loadedNotes.length} public note${loadedNotes.length === 1 ? '' : 's'} from Supabase.`)
+        showNotice(`Loaded ${loadedNotes.length} public note${loadedNotes.length === 1 ? '' : 's'} from Supabase.`)
       })
       .catch((error: Error) => {
         setLoadError(error.message)
-        setNotice('Could not load public notes.')
+        showNotice('Could not load public notes.')
       })
       .finally(() => {
         setIsLoading(false)
       })
-  }, [])
+  }, [showNotice])
 
   useEffect(() => {
     if (ownerSession) {
-      setNotice('Owner mode is on. Move notes directly on the wall.')
+      showNotice('Owner mode is on. Move notes directly on the wall.')
       return
     }
 
     setIsEditing(false)
     setDraft(null)
     setDeleteTargetNoteId(null)
-  }, [ownerSession])
+  }, [ownerSession, showNotice])
 
   useEffect(() => {
     if (authNotice) {
-      setNotice(authNotice)
+      showNotice(authNotice)
     }
-  }, [authNotice])
+  }, [authNotice, showNotice])
+
+  useEffect(() => {
+    if (!notice) {
+      setIsNoticeVisible(false)
+      return
+    }
+
+    setIsNoticeVisible(true)
+    const hideDelay = isErrorNotice(notice) ? errorNoticeDurationMs : normalNoticeDurationMs
+    const timeoutId = window.setTimeout(() => {
+      setIsNoticeVisible(false)
+    }, hideDelay)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [notice, noticeVersion])
 
   useEffect(() => {
     if (!shouldOpenLogin || ownerSession) return
@@ -188,8 +239,17 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   }, [])
 
   useEffect(() => {
-    setWallOffset((current) => clampWallOffset(current, wallZoom))
-  }, [clampWallOffset, wallZoom])
+    if (!viewportSize.width || !viewportSize.height) return
+
+    setWallOffset((current) => {
+      if (!hasCenteredWallRef.current) {
+        hasCenteredWallRef.current = true
+        return getCenteredWallOffset(wallZoom)
+      }
+
+      return clampWallOffset(current, wallZoom)
+    })
+  }, [clampWallOffset, getCenteredWallOffset, viewportSize.height, viewportSize.width, wallZoom])
 
   const persistNote = async (
     note: PinNote,
@@ -200,7 +260,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     } = {},
   ) => {
     if (!ownerSession) {
-      setNotice('Log in as owner before changing notes.')
+      showNotice('Log in as owner before changing notes.')
       return
     }
 
@@ -209,7 +269,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     try {
       const saved = await updateNote(note)
       setNotes((current) => current.map((item) => (item.id === saved.id ? saved : item)))
-      setNotice(options.successNotice ?? 'Saved to the wall.')
+      showNotice(options.successNotice ?? 'Saved to the wall.')
     } catch (error) {
       const rollbackNote = options.rollbackNote
 
@@ -218,13 +278,13 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       }
 
       const errorMessage = error instanceof Error ? error.message : 'Could not save this note.'
-      setNotice(options.failureNotice ? `${options.failureNotice} ${errorMessage}` : errorMessage)
+      showNotice(options.failureNotice ? `${options.failureNotice} ${errorMessage}` : errorMessage)
     }
   }
 
   const persistNotePosition = async (note: PinNote, originalNote: PinNote) => {
     if (!ownerSession) {
-      setNotice('Log in as owner before moving notes.')
+      showNotice('Log in as owner before moving notes.')
       return
     }
 
@@ -234,7 +294,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
         noteOwnerId: note.owner_id,
         sessionUserId: ownerSession.user.id,
       })
-      setNotice('Could not save the new position. This note is not owned by the current signed-in user.')
+      showNotice('Could not save the new position. This note is not owned by the current signed-in user.')
       return
     }
 
@@ -251,7 +311,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     try {
       const saved = await updateNotePosition(note)
       setNotes((current) => current.map((item) => (item.id === saved.id ? saved : item)))
-      setNotice('Saved position to the wall.')
+      showNotice('Saved position to the wall.')
     } catch (error) {
       console.error('[PinWall drag] position persistence failed', {
         draggedNoteId: note.id,
@@ -271,7 +331,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       })
 
       const errorMessage = error instanceof Error ? error.message : 'Could not save the new position.'
-      setNotice(`Could not save the new position. ${errorMessage}`)
+      showNotice(`Could not save the new position. ${errorMessage}`)
     }
   }
 
@@ -296,7 +356,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
 
   const startNewNote = () => {
     if (!ownerSession) {
-      setNotice('Log in as owner before pinning a new note.')
+      showNotice('Log in as owner before pinning a new note.')
       setIsLoginOpen(true)
       return
     }
@@ -309,13 +369,13 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
 
   const saveDraft = async () => {
     if (!ownerSession) {
-      setNotice('Log in as owner before saving notes.')
+      showNotice('Log in as owner before saving notes.')
       setIsLoginOpen(true)
       return
     }
 
     if (!draft || !draft.content.trim()) {
-      setNotice('Write a little something before pinning it.')
+      showNotice('Write a little something before pinning it.')
       return
     }
 
@@ -337,9 +397,9 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       }
 
       setIsEditing(false)
-      setNotice('Pinned.')
+      showNotice('Pinned.')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not save this note.')
+      showNotice(error instanceof Error ? error.message : 'Could not save this note.')
     }
   }
 
@@ -347,7 +407,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
     if (!deleteTargetNote) return
 
     if (!ownerSession) {
-      setNotice('Log in as owner before deleting notes.')
+      showNotice('Log in as owner before deleting notes.')
       setIsLoginOpen(true)
       return
     }
@@ -361,9 +421,9 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       setDeleteTargetNoteId(null)
       setIsDeleteConfirmOpen(false)
       setIsEditing(false)
-      setNotice('Note removed.')
+      showNotice('Note removed.')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not delete this note.')
+      showNotice(error instanceof Error ? error.message : 'Could not delete this note.')
     }
   }
 
@@ -385,8 +445,17 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   const resetWallView = () => {
     const defaultZoom = 1
     setWallZoom(defaultZoom)
-    setWallOffset(clampWallOffset({ x: 0, y: 0 }, defaultZoom))
+    setWallOffset(getCenteredWallOffset(defaultZoom))
   }
+
+  useEffect(() => {
+    if (!resetViewSignal || !viewportSize.width || !viewportSize.height) return
+
+    const defaultZoom = 1
+    hasCenteredWallRef.current = true
+    setWallZoom(defaultZoom)
+    setWallOffset(getCenteredWallOffset(defaultZoom))
+  }, [getCenteredWallOffset, resetViewSignal, viewportSize.height, viewportSize.width])
 
   const handleWallWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -590,9 +659,9 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       setIsLoginOpen(false)
       setOwnerPassword('')
       onAuthNotice('')
-      setNotice('Owner mode is on. Move notes directly on the wall.')
+      showNotice('Owner mode is on. Move notes directly on the wall.')
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Owner login failed.')
+      showNotice(error instanceof Error ? error.message : 'Owner login failed.')
     } finally {
       setIsAuthBusy(false)
     }
@@ -613,13 +682,6 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
   return (
     <main className="pinwall-shell">
       <header className="topbar" aria-label="Wall controls">
-        <div className="brand">
-          <span className="brand-pin" aria-hidden="true" />
-          <div>
-            <h1>PinWall</h1>
-          </div>
-        </div>
-
         <div className="admin-entry">
           <div className={`search-box ${isSearchFocused || hasQuery ? 'is-active' : ''}`}>
             <button className="search-toggle" type="button" aria-label="Search notes" title="Search notes" onClick={() => searchInputRef.current?.focus()}>
@@ -771,7 +833,7 @@ export function WallView({ authNotice, ownerSession, shouldOpenLogin, onAuthNoti
       </section>
 
       <footer className="status-strip">
-        <span>{notice}</span>
+        {isNoticeVisible && notice ? <span>{notice}</span> : null}
         {hasQuery ? <span>{matchingNotes.length} bright note{matchingNotes.length === 1 ? '' : 's'}</span> : null}
       </footer>
 
