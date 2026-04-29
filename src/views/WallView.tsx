@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
-import { BringToFront, LocateFixed, Pencil, RotateCwSquare, Search, SquarePen, SquareX, Trash2, X } from 'lucide-react'
+import { BringToFront, LocateFixed, Pencil, RotateCwSquare, Search, SendHorizontal, SquarePen, SquareX, Trash2, X } from 'lucide-react'
 import '../App.css'
 import type { Session } from '@supabase/supabase-js'
 import { signInOwner } from '../lib/authRepository'
@@ -19,6 +19,11 @@ const normalNoticeDurationMs = 1000
 const errorNoticeDurationMs = 12000
 const noteColors = ['#fff2a8', '#ffd1dc', '#cdf2ca', '#cde7ff', '#f5d6ff']
 const ownerLoginEmail = 'boquanchai@gmail.com'
+const mobileWallBreakpoint = 780
+const defaultNoteSize = { width: 260, height: 220 }
+const captureFabStorageKey = 'pinwall.captureFabPosition'
+const captureFabSize = 60
+const captureFabMargin = { top: 14, right: 14, bottom: 16, left: 14 }
 const emptyDraft = (zIndex: number): NoteDraft => ({
   title: '',
   content: '',
@@ -93,10 +98,20 @@ export function WallView({
 }: WallViewProps) {
   const wallRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const captureInputRef = useRef<HTMLTextAreaElement>(null)
   const dragMovedRef = useRef(false)
   const dragStartNoteRef = useRef<PinNote | null>(null)
   const suppressNextClickRef = useRef(false)
   const hasCenteredWallRef = useRef(false)
+  const captureFabDragRef = useRef<{
+    pointerId: number
+    startClientX: number
+    startClientY: number
+    startX: number
+    startY: number
+    moved: boolean
+  } | null>(null)
+  const suppressCaptureFabClickRef = useRef(false)
   const [notes, setNotes] = useState<PinNote[]>([])
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -108,6 +123,10 @@ export function WallView({
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [deleteTargetNoteId, setDeleteTargetNoteId] = useState<string | null>(null)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false)
+  const [captureText, setCaptureText] = useState('')
+  const [isCaptureSaving, setIsCaptureSaving] = useState(false)
+  const [mobileActionNoteId, setMobileActionNoteId] = useState<string | null>(null)
   const [notice, setNotice] = useState('Loading the wall...')
   const [noticeVersion, setNoticeVersion] = useState(0)
   const [isNoticeVisible, setIsNoticeVisible] = useState(true)
@@ -117,12 +136,15 @@ export function WallView({
   const [wallOffset, setWallOffset] = useState({ x: 0, y: 0 })
   const [wallZoom, setWallZoom] = useState(1)
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
+  const [captureFabPosition, setCaptureFabPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isCaptureFabDragging, setIsCaptureFabDragging] = useState(false)
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const deleteTargetNote = notes.find((note) => note.id === deleteTargetNoteId) ?? null
   const isAdmin = Boolean(ownerSession)
   const modalDraft = draft ?? (selectedNote ? noteToDraft(selectedNote) : null)
   const matchingNotes = useMemo(() => notes.filter((note) => matchesSearch(note, query)), [notes, query])
+  const isMobileWall = viewportSize.width > 0 && viewportSize.width <= mobileWallBreakpoint
   const hasQuery = query.trim().length > 0
   const showEmptyState = !isLoading && !loadError && notes.length === 0
   const maxZ = notes.reduce((highest, note) => Math.max(highest, note.z_index), 0)
@@ -168,6 +190,19 @@ export function WallView({
     setNoticeVersion((current) => current + 1)
   }, [])
 
+  const clampCaptureFabPosition = useCallback(
+    (position: { x: number; y: number }) => {
+      const maxX = Math.max(captureFabMargin.left, viewportSize.width - captureFabSize - captureFabMargin.right)
+      const maxY = Math.max(captureFabMargin.top, viewportSize.height - captureFabSize - captureFabMargin.bottom)
+
+      return {
+        x: Math.round(Math.max(captureFabMargin.left, Math.min(maxX, position.x))),
+        y: Math.round(Math.max(captureFabMargin.top, Math.min(maxY, position.y))),
+      }
+    },
+    [viewportSize.height, viewportSize.width],
+  )
+
   useEffect(() => {
     loadNotes()
       .then((loadedNotes) => {
@@ -192,7 +227,14 @@ export function WallView({
     setIsEditing(false)
     setDraft(null)
     setDeleteTargetNoteId(null)
+    setMobileActionNoteId(null)
   }, [ownerSession, showNotice])
+
+  useEffect(() => {
+    if (!isMobileWall) {
+      setMobileActionNoteId(null)
+    }
+  }, [isMobileWall])
 
   useEffect(() => {
     if (authNotice) {
@@ -221,6 +263,41 @@ export function WallView({
     setIsLoginOpen(true)
     onLoginRequestHandled()
   }, [onLoginRequestHandled, ownerSession, shouldOpenLogin])
+
+  useEffect(() => {
+    if (!isCaptureOpen) return
+
+    const focusTimeout = window.setTimeout(() => {
+      captureInputRef.current?.focus()
+    }, 80)
+
+    return () => window.clearTimeout(focusTimeout)
+  }, [isCaptureOpen])
+
+  useEffect(() => {
+    if (!isMobileWall || !viewportSize.width || !viewportSize.height) return
+
+    setCaptureFabPosition((current) => {
+      if (current) return clampCaptureFabPosition(current)
+
+      try {
+        const savedPosition = window.localStorage.getItem(captureFabStorageKey)
+        if (savedPosition) {
+          const parsed = JSON.parse(savedPosition) as Partial<{ x: number; y: number }>
+          if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+            return clampCaptureFabPosition({ x: parsed.x, y: parsed.y })
+          }
+        }
+      } catch {
+        window.localStorage.removeItem(captureFabStorageKey)
+      }
+
+      return clampCaptureFabPosition({
+        x: viewportSize.width - captureFabSize - captureFabMargin.right,
+        y: viewportSize.height - captureFabSize - captureFabMargin.bottom,
+      })
+    })
+  }, [clampCaptureFabPosition, isMobileWall, viewportSize.height, viewportSize.width])
 
   useEffect(() => {
     if (!wallRef.current) return
@@ -335,7 +412,31 @@ export function WallView({
     }
   }
 
+  const getVisibleDraft = (zIndex: number, content = ''): NoteDraft => {
+    const noteWidth = defaultNoteSize.width
+    const noteHeight = defaultNoteSize.height
+    const screenX = Math.max(24, (viewportSize.width - noteWidth * wallZoom) / 2)
+    const screenY = Math.max(24, (viewportSize.height - noteHeight * wallZoom) / 2)
+    const visibleX = (screenX - wallOffset.x) / wallZoom
+    const visibleY = (screenY - wallOffset.y) / wallZoom
+
+    return {
+      title: '',
+      content,
+      tags: [],
+      x: Math.round(Math.max(0, Math.min(wallSize.width - noteWidth, visibleX))),
+      y: Math.round(Math.max(0, Math.min(wallSize.height - noteHeight, visibleY))),
+      z_index: zIndex,
+      rotation: isMobileWall ? -1 : Math.round(Math.random() * 8) - 4,
+      width: noteWidth,
+      height: noteHeight,
+      color: noteColors[Math.floor(Math.random() * noteColors.length)],
+      is_public: true,
+    }
+  }
+
   const openNote = (note: PinNote) => {
+    setMobileActionNoteId(null)
     setSelectedNoteId(note.id)
     setDraft(noteToDraft(note))
     setIsEditing(false)
@@ -344,6 +445,11 @@ export function WallView({
   const handleNoteClick = (note: PinNote) => {
     if (suppressNextClickRef.current) {
       suppressNextClickRef.current = false
+      return
+    }
+
+    if (isMobileWall && isAdmin && mobileActionNoteId !== note.id) {
+      setMobileActionNoteId(note.id)
       return
     }
 
@@ -361,10 +467,117 @@ export function WallView({
       return
     }
 
-    const nextDraft = emptyDraft(maxZ + 1)
+    const nextDraft = isMobileWall ? getVisibleDraft(maxZ + 1) : emptyDraft(maxZ + 1)
     setDraft(nextDraft)
     setSelectedNoteId(null)
+    setMobileActionNoteId(null)
     setIsEditing(true)
+  }
+
+  const openQuickCapture = () => {
+    if (!ownerSession) {
+      showNotice('Log in as owner before capturing notes.')
+      setIsLoginOpen(true)
+      return
+    }
+
+    setIsCaptureOpen(true)
+  }
+
+  const handleCaptureFabPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isMobileWall || !captureFabPosition) return
+
+    event.stopPropagation()
+    captureFabDragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: captureFabPosition.x,
+      startY: captureFabPosition.y,
+      moved: false,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handleCaptureFabPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = captureFabDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    event.stopPropagation()
+    const deltaX = event.clientX - drag.startClientX
+    const deltaY = event.clientY - drag.startClientY
+    const movedEnough = Math.hypot(deltaX, deltaY) >= dragThreshold
+
+    if (!movedEnough && !drag.moved) return
+
+    drag.moved = true
+    setIsCaptureFabDragging(true)
+    setCaptureFabPosition(clampCaptureFabPosition({ x: drag.startX + deltaX, y: drag.startY + deltaY }))
+  }
+
+  const finishCaptureFabDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = captureFabDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    event.stopPropagation()
+    if (drag.moved) {
+      const deltaX = event.clientX - drag.startClientX
+      const deltaY = event.clientY - drag.startClientY
+      const nextPosition = clampCaptureFabPosition({ x: drag.startX + deltaX, y: drag.startY + deltaY })
+
+      setCaptureFabPosition(nextPosition)
+      window.localStorage.setItem(captureFabStorageKey, JSON.stringify(nextPosition))
+      suppressCaptureFabClickRef.current = true
+    }
+
+    captureFabDragRef.current = null
+    setIsCaptureFabDragging(false)
+  }
+
+  const handleCaptureFabClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (suppressCaptureFabClickRef.current) {
+      event.preventDefault()
+      suppressCaptureFabClickRef.current = false
+      return
+    }
+
+    openQuickCapture()
+  }
+
+  const closeQuickCapture = () => {
+    if (isCaptureSaving) return
+
+    setIsCaptureOpen(false)
+    setCaptureText('')
+  }
+
+  const saveQuickCapture = async () => {
+    if (!ownerSession) {
+      showNotice('Log in as owner before capturing notes.')
+      setIsLoginOpen(true)
+      return
+    }
+
+    const content = captureText.trim()
+
+    if (!content) {
+      showNotice('Write a quick thought before saving it.')
+      return
+    }
+
+    setIsCaptureSaving(true)
+
+    try {
+      const saved = await createNote(getVisibleDraft(maxZ + 1, content), ownerSession.user.id)
+      setNotes((current) => [...current, saved])
+      setCaptureText('')
+      setIsCaptureOpen(false)
+      showNotice('Captured.')
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Could not capture this note.')
+    } finally {
+      setIsCaptureSaving(false)
+    }
   }
 
   const saveDraft = async () => {
@@ -432,12 +645,14 @@ export function WallView({
   }
 
   const editNote = (note: PinNote) => {
+    setMobileActionNoteId(null)
     setSelectedNoteId(note.id)
     setDraft(noteToDraft(note))
     setIsEditing(true)
   }
 
   const confirmDeleteNote = (note: PinNote) => {
+    setMobileActionNoteId(null)
     setDeleteTargetNoteId(note.id)
     setIsDeleteConfirmOpen(true)
   }
@@ -463,7 +678,7 @@ export function WallView({
     const isZoomGesture = event.ctrlKey || event.metaKey
 
     if (!isZoomGesture) {
-      setWallOffset((current) => clampWallOffset({ x: current.x - event.deltaX, y: current.y - event.deltaY }))
+      setWallOffset((current) => clampWallOffset({ x: current.x - event.deltaX, y: isMobileWall ? current.y : current.y - event.deltaY }))
       return
     }
 
@@ -519,6 +734,7 @@ export function WallView({
     const target = event.target as HTMLElement
     if (target.closest('.sticky-note, button, input, textarea, a')) return
 
+    setMobileActionNoteId(null)
     dragMovedRef.current = false
     dragStartNoteRef.current = null
     setDragState({
@@ -564,7 +780,7 @@ export function WallView({
 
     if (dragState.type === 'wall') {
       if (!movedEnough) return
-      setWallOffset(clampWallOffset({ x: dragState.startOffsetX + deltaX, y: dragState.startOffsetY + deltaY }))
+      setWallOffset(clampWallOffset({ x: dragState.startOffsetX + deltaX, y: isMobileWall ? dragState.startOffsetY : dragState.startOffsetY + deltaY }))
       return
     }
 
@@ -679,6 +895,16 @@ export function WallView({
     setDraft(null)
   }
 
+  const captureFabStyle =
+    isMobileWall && captureFabPosition
+      ? ({
+          left: captureFabPosition.x,
+          top: captureFabPosition.y,
+          right: 'auto',
+          bottom: 'auto',
+        } satisfies CSSProperties)
+      : undefined
+
   return (
     <main className="pinwall-shell">
       <header className="topbar" aria-label="Wall controls">
@@ -714,6 +940,21 @@ export function WallView({
         </div>
       </header>
 
+      <button
+        className={`capture-fab ${isCaptureFabDragging ? 'is-dragging' : ''}`}
+        type="button"
+        style={captureFabStyle}
+        onClick={handleCaptureFabClick}
+        onPointerDown={handleCaptureFabPointerDown}
+        onPointerMove={handleCaptureFabPointerMove}
+        onPointerUp={finishCaptureFabDrag}
+        onPointerCancel={finishCaptureFabDrag}
+        aria-label="Quick capture"
+        title="Quick capture"
+      >
+        <SquarePen size={25} strokeWidth={2.2} aria-hidden="true" />
+      </button>
+
       <section
         ref={wallRef}
         className="wall-viewport"
@@ -734,9 +975,10 @@ export function WallView({
         >
           {notes.map((note) => {
             const isMatch = matchesSearch(note, query)
+            const isMobileActionSelected = isMobileWall && mobileActionNoteId === note.id
             return (
               <article
-                className={`sticky-note ${hasQuery && isMatch ? 'is-match' : ''} ${hasQuery && !isMatch ? 'is-muted' : ''}`}
+                className={`sticky-note ${hasQuery && isMatch ? 'is-match' : ''} ${hasQuery && !isMatch ? 'is-muted' : ''} ${isMobileActionSelected ? 'is-action-selected' : ''}`}
                 key={note.id}
                 style={{
                   left: note.x,
@@ -893,6 +1135,44 @@ export function WallView({
                 {modalDraft.tags.length > 0 ? <p className="modal-tags">{modalDraft.tags.map((tag) => `#${tag}`).join(' ')}</p> : null}
               </div>
             )}
+          </section>
+        </div>
+      ) : null}
+
+      {isCaptureOpen ? (
+        <div className="modal-backdrop capture-backdrop" role="presentation" onMouseDown={closeQuickCapture}>
+          <section className="quick-capture-modal" role="dialog" aria-modal="true" aria-label="Capture note" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="quick-capture-heading">
+              <span className="brand-pin" aria-hidden="true" />
+              <div>
+                <h2>New note</h2>
+                <p>Save now, place it on the wall.</p>
+              </div>
+            </div>
+            <textarea
+              ref={captureInputRef}
+              autoFocus
+              value={captureText}
+              onChange={(event) => setCaptureText(event.target.value)}
+              placeholder="What just crossed your mind?"
+              rows={7}
+              aria-label="Quick capture note"
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  event.preventDefault()
+                  void saveQuickCapture()
+                }
+              }}
+            />
+            <div className="quick-capture-actions">
+              <button className="quiet-button" type="button" onClick={closeQuickCapture} disabled={isCaptureSaving}>
+                Close
+              </button>
+              <button className="primary-button quick-capture-save" type="button" onClick={saveQuickCapture} disabled={isCaptureSaving}>
+                <SendHorizontal size={16} strokeWidth={2.1} aria-hidden="true" />
+                <span>{isCaptureSaving ? 'Saving...' : 'Save'}</span>
+              </button>
+            </div>
           </section>
         </div>
       ) : null}

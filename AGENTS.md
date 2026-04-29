@@ -2,62 +2,91 @@
 
 ## Project: PinWall
 
-PinWall is a lightweight owner-first workspace with two surfaces:
+PinWall is a lightweight owner-first workspace with three layers:
 
+- **Capture**: fast note capture, especially on mobile
 - **Wall**: a spatial sticky-note wall with structured notes
 - **Board**: a freeform Excalidraw canvas with cloud persistence
 
-Both live in the same app, but they are **separate surfaces** and **must not share one data model**.
+These layers belong to the same product, but they serve different purposes and must not be collapsed into one messy interface.
 
 ---
 
-## Core Principles
+## Core Product Philosophy
 
-PinWall is **not**:
+PinWall is not:
 - a dashboard
 - a CMS
 - a kanban board
 - a generic notes app
+- an infinite whiteboard
 - a nested Excalidraw fork
 
-PinWall **is**:
+PinWall is:
 - a personal online workspace
-- a minimal public/private publishing surface
-- spatial, tactile, lightweight
+- a capture → display → organize flow
 - owner-editable, visitor-readable where allowed
+- spatial, lightweight, and practical
 
 ---
 
-## Surfaces
+## Product Layers
 
-### Wall
-Wall is a sticky-note wall.
+### 1. Capture
+Capture is the fast-entry layer.
+
+Purpose:
+- record fleeting thoughts quickly
+- reduce friction, especially on mobile
+- send notes into the system without requiring full organization first
+
+Requirements:
+- quick entry point
+- minimal input friction
+- fast save
+- new captured notes go to a predictable landing zone on the Wall
+
+Capture should feel:
+- immediate
+- lightweight
+- mobile-friendly
+
+Capture is not:
+- a full editor
+- a complex AI workflow
+- a management page
+
+---
+
+### 2. Wall
+Wall is the visual sticky-note surface.
 
 Requirements:
 - fixed-position notes
 - overlap, stacking, slight rotation
-- note modal for reading/editing
+- note modal for viewing/editing
 - search
 - owner can create, edit, delete, move, rotate, reorder notes
-- visitors can only view public notes
+- visitors can read public notes
+- finite wall with bounded pan/zoom
 
 Wall must feel like:
 > a real wall with pinned notes
 
-Do not turn Wall into:
+Wall must not become:
 - a list
 - a grid
 - masonry
-- a management dashboard
+- a heavy admin interface
 
 ---
 
-### Board
-Board is an Excalidraw-based drawing surface.
+### 3. Board
+Board is the Excalidraw-based sketch surface.
 
 Requirements:
 - Excalidraw integrated as an npm dependency
-- board scene persisted to Supabase
+- scene persisted to Supabase
 - images uploaded to Supabase Storage
 - image metadata stored separately
 - owner can edit
@@ -67,17 +96,19 @@ Do not clone the Excalidraw repo into this project.
 
 ---
 
-## Roles
+## User Roles
 
 ### Visitor
 - can read public Wall notes
 - can search notes
-- can open note modal
-- can read public boards if allowed
+- can open note details
+- can read public boards if enabled
 - cannot edit Wall or Board
+- cannot use owner-only capture actions if restricted
 
 ### Owner
 - authenticated via real Supabase Auth
+- can use Capture
 - can edit Wall and Board
 - can upload board images
 - no fake local admin-key auth
@@ -104,6 +135,8 @@ Canonical fields:
 - created_at
 - updated_at
 - linked_board_id (optional)
+- note_source (optional: e.g. `capture`, `manual`)
+- inbox_state (optional, future)
 
 ### `boards`
 Canonical fields:
@@ -133,6 +166,12 @@ Do not mix note rows, board rows, and image metadata in one table.
 ---
 
 ## Persistence Rules
+
+### Capture
+- captured notes must persist immediately
+- keep save flow simple
+- do not require full note editing before save
+- captured notes should land in a predictable Inbox/Quick Capture area on the Wall
 
 ### Wall
 - local drag should feel smooth
@@ -165,19 +204,26 @@ Do not mix note rows, board rows, and image metadata in one table.
 
 ### Shared
 - minimal, tidy, lightweight
-- floating controls preferred over heavy nav
 - no bulky admin panel
+- prefer low-friction interactions
+
+### Capture
+- must be fast to open
+- must be comfortable on mobile
+- should not require many decisions
+- should not interrupt the rest of the app unnecessarily
 
 ### Wall
 - sticky controls may appear on hover/focus
 - note action clicks must not trigger note open
 - note body click still opens note
 - sticky note text uses handwritten-style font
+- wall view should open centered
 
 ### Board
 - preserve Excalidraw usability
 - keep overlays unobtrusive
-- do not break bottom-left Excalidraw controls
+- do not break Excalidraw controls
 
 ---
 
@@ -186,7 +232,7 @@ Do not mix note rows, board rows, and image metadata in one table.
 Must:
 - use Vite frontend
 - use Supabase for auth + DB + storage
-- keep Wall and Board separate
+- keep Capture, Wall, and Board conceptually distinct
 - keep implementation small and practical
 
 Must not:
@@ -200,12 +246,13 @@ Must not:
 
 ## Current Priorities
 
-1. Stable Wall editing and persistence
-2. Stable Board persistence
-3. Stable Board image upload + restore flow
-4. Clean owner auth flow
-5. Deployment-ready Vercel setup
-6. Small UI polish only
+1. Fast Capture MVP
+2. Stable Wall editing and persistence
+3. Stable Board persistence
+4. Stable Board image upload + restore flow
+5. Clean owner auth flow
+6. Deployment-ready Vercel setup
+7. Small UI polish only
 
 ---
 
@@ -213,8 +260,10 @@ Must not:
 
 Always preserve this distinction:
 
-- **Wall = structured sticky-note wall**
+- **Capture = fast input**
+- **Wall = structured sticky-note display**
 - **Board = freeform sketch canvas**
 
-Same workspace, different surfaces, different data.
-If a change blurs them into one messy hybrid, reject or redesign it.
+Same workspace, different layers, different responsibilities.
+
+If a change blurs these into one cluttered hybrid, reject or redesign it.
