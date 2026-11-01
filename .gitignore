@@ -40,3 +40,6 @@ supabase/.temp
 *.njsproj
 *.sln
 *.sw?
+
+# Private legacy snapshots and local drafts
+.legacy/

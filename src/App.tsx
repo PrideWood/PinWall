@@ -1,230 +1,460 @@
-import { useEffect, useRef, useState, type FocusEvent } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { ArrowLeftRight, LogIn, LogOut } from 'lucide-react'
-import './App.css'
-import { getOwnerSession, onOwnerSessionChange, signOutOwner } from './lib/authRepository'
-import { BoardView } from './views/BoardView'
-import { ForgotPasswordView } from './views/ForgotPasswordView'
-import { UpdatePasswordView } from './views/UpdatePasswordView'
-import { WallView } from './views/WallView'
-
-type Route = 'wall' | 'board' | 'forgot-password' | 'update-password'
-
-const getRouteFromPath = (): Route => {
-  if (window.location.pathname === '/board') return 'board'
-  if (window.location.pathname === '/forgot-password') return 'forgot-password'
-  if (window.location.pathname === '/update-password') return 'update-password'
-  return 'wall'
-}
-
-const getPathForRoute = (route: Route) => (route === 'board' ? '/board' : route === 'forgot-password' ? '/forgot-password' : route === 'update-password' ? '/update-password' : '/wall')
-
-function App() {
-  const [route, setRoute] = useState<Route>(getRouteFromPath)
-  const [ownerSession, setOwnerSession] = useState<Session | null>(null)
-  const [authNotice, setAuthNotice] = useState('')
-  const [isAuthBusy, setIsAuthBusy] = useState(false)
-  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
-  const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
-  const [shouldOpenWallLogin, setShouldOpenWallLogin] = useState(false)
-  const [wallResetToken, setWallResetToken] = useState(0)
-  const workspaceMenuCloseTimeoutRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    const handlePopState = () => setRoute(getRouteFromPath())
-
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
-
-  useEffect(() => {
-    setIsWorkspaceMenuOpen(false)
-
-    if (route === 'wall') {
-      setWallResetToken((current) => current + 1)
-    }
-  }, [route])
-
-  useEffect(
-    () => () => {
-      if (workspaceMenuCloseTimeoutRef.current) {
-        window.clearTimeout(workspaceMenuCloseTimeoutRef.current)
-      }
-    },
-    [],
-  )
-
-  useEffect(() => {
-    getOwnerSession()
-      .then(setOwnerSession)
-      .catch((error: Error) => {
-        setAuthNotice(error.message)
-      })
-
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  ArrowRight,
+  Download,
+  LockKeyhole,
+  LogOut,
+  Pencil,
+  Plus,
+  Shapes,
+  Trash2,
+} from "lucide-react";
+import type { Board, Draft, LoadedBoard, Snapshot, User } from "./types/board";
+import { api, ApiError } from "./lib/api";
+import { clearDrafts, getDraft, removeDraft } from "./lib/drafts";
+import { PhonePage } from "./views/PhonePage";
+import { ScanLogin } from "./views/ScanLogin";
+import "./App.css";
+const BoardEditor = lazy(() =>
+  import("./views/BoardEditor").then((m) => ({ default: m.BoardEditor })),
+);
+const BoardViewer = lazy(() =>
+  import("./views/BoardViewer").then((m) => ({ default: m.BoardViewer })),
+);
+type OpenBoard = {
+  board: LoadedBoard;
+  initial: Snapshot;
+  draft?: Draft;
+  recovered: boolean;
+};
+const boardFromHash = () =>
+  /^#[0-9a-f-]{36}$/.test(location.hash) ? location.hash.slice(1) : null;
+const emptyBoard: Board = {
+  id: "empty",
+  title: "白板",
+  version: 0,
+  created_at: "",
+  updated_at: "",
+};
+const emptyScene: Snapshot = {
+  scene: { elements: [], appState: { viewBackgroundColor: "#ffffff" } },
+  files: {},
+};
+function Workspace() {
+  const [user, setUser] = useState<User | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [boards, setBoards] = useState<Board[]>([]);
+  const [open, setOpen] = useState<OpenBoard | null>(null);
+  const [listing, setListing] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const channel = useRef<BroadcastChannel | null>(null);
+  const generation = useRef(0);
+  const refresh = useCallback(async () => {
+    const rows = await api<Board[]>("/boards");
+    setBoards(rows);
+    return rows;
+  }, []);
+  const load = useCallback(async (id: string, owner: User | null) => {
+    const current = ++generation.current;
+    setBusy(true);
+    setNotice("");
     try {
-      return onOwnerSessionChange(setOwnerSession)
-    } catch (error) {
-      setAuthNotice(error instanceof Error ? error.message : 'Could not watch owner session.')
-    }
-  }, [])
-
-  const navigateToRoute = (nextRoute: Route) => {
-    if (nextRoute === route) return
-
-    setRoute(nextRoute)
-    window.history.pushState(null, '', getPathForRoute(nextRoute))
-  }
-
-  const switchSurface = () => {
-    setIsWorkspaceMenuOpen(false)
-    navigateToRoute(route === 'wall' ? 'board' : 'wall')
-  }
-
-  const switchToWall = () => {
-    setIsWorkspaceMenuOpen(false)
-    navigateToRoute('wall')
-  }
-
-  const openWallLogin = () => {
-    navigateToRoute('wall')
-  }
-
-  const openFloatingLogin = () => {
-    setIsWorkspaceMenuOpen(false)
-    setShouldOpenWallLogin(true)
-    navigateToRoute('wall')
-  }
-
-  const requestLogout = () => {
-    setIsWorkspaceMenuOpen(false)
-    setIsLogoutConfirmOpen(true)
-  }
-
-  const closeWorkspaceMenuOnBlur = (event: FocusEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) {
-      setIsWorkspaceMenuOpen(false)
-    }
-  }
-
-  const clearWorkspaceMenuCloseTimer = () => {
-    if (!workspaceMenuCloseTimeoutRef.current) return
-
-    window.clearTimeout(workspaceMenuCloseTimeoutRef.current)
-    workspaceMenuCloseTimeoutRef.current = null
-  }
-
-  const scheduleWorkspaceMenuClose = () => {
-    clearWorkspaceMenuCloseTimer()
-    workspaceMenuCloseTimeoutRef.current = window.setTimeout(() => {
-      setIsWorkspaceMenuOpen(false)
-      workspaceMenuCloseTimeoutRef.current = null
-    }, 260)
-  }
-
-  const logoutOwner = async () => {
-    setIsAuthBusy(true)
-
-    try {
-      await signOutOwner()
-      setOwnerSession(null)
-      setIsLogoutConfirmOpen(false)
-      setAuthNotice('Owner mode is off.')
-    } catch (error) {
-      setAuthNotice(error instanceof Error ? error.message : 'Could not sign out.')
+      const board = await api<LoadedBoard>(`/boards/${id}`);
+      const { restoreImages } = await import("./lib/scene");
+      const initial = await restoreImages(board);
+      const draft = owner
+        ? await getDraft(owner.id, id).catch(() => undefined)
+        : undefined;
+      if (current !== generation.current) return;
+      setOpen({ board, initial, draft, recovered: false });
+      setListing(false);
+      history.replaceState(null, "", `#${id}`);
     } finally {
-      setIsAuthBusy(false)
+      if (current === generation.current) setBusy(false);
+    }
+  }, []);
+  const initialize = useCallback(async () => {
+    setChecking(true);
+    setNotice("");
+    try {
+      const me = await api<User>("/me").catch((error) => {
+        if (error instanceof ApiError && error.status === 401) return null;
+        throw error;
+      });
+      const rows = await refresh();
+      const id = boardFromHash() || rows[0]?.id;
+      if (id) await load(id, me);
+      setUser(me);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "白板暂时无法加载。");
+    } finally {
+      setChecking(false);
+    }
+  }, [load, refresh]);
+  useEffect(() => {
+    void initialize();
+  }, [initialize]);
+  const visitor = useCallback(async () => {
+    window.dispatchEvent(new Event("whiteboard-lock"));
+    generation.current++;
+    const id = boardFromHash();
+    setUser(null);
+    setOpen(null);
+    setLoginOpen(false);
+    await clearDrafts().catch(() =>
+      setNotice("本机草稿清理失败，共享电脑上请清除此站点数据。"),
+    );
+    try {
+      const rows = await refresh();
+      if (id || rows[0]) await load(id || rows[0].id, null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "白板加载失败。");
+    }
+  }, [load, refresh]);
+  useEffect(() => {
+    if (!("BroadcastChannel" in window)) return;
+    const current = new BroadcastChannel("whiteboard-session");
+    channel.current = current;
+    current.onmessage = () => void visitor();
+    return () => {
+      current.close();
+      channel.current = null;
+    };
+  }, [visitor]);
+  async function unlock() {
+    const me = await api<User>("/me");
+    let rows = await refresh();
+    if (!rows.length) {
+      const board = await api<Board>("/boards", {
+        method: "POST",
+        body: JSON.stringify({ title: "我的白板" }),
+      });
+      rows = [board];
+      setBoards(rows);
+    }
+    await load(open?.board.id || boardFromHash() || rows[0].id, me);
+    setUser(me);
+  }
+  async function logout() {
+    await api("/auth/sign-out", { method: "POST", body: "{}" });
+    channel.current?.postMessage("logout");
+    await visitor();
+  }
+  const showError = (error: unknown) =>
+    setNotice(error instanceof Error ? error.message : "操作失败。");
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    if (!user) return;
+    setBusy(true);
+    setNotice("");
+    try {
+      const board = await api<Board>("/boards", {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim() || "未命名白板" }),
+      });
+      setTitle("");
+      await refresh();
+      await load(board.id, user);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBusy(false);
     }
   }
-
-  const renderRoute = () => {
-    if (route === 'board') return <BoardView />
-    if (route === 'forgot-password') return <ForgotPasswordView onBackToLogin={openWallLogin} />
-    if (route === 'update-password') return <UpdatePasswordView onBackToLogin={openWallLogin} />
-    return (
-      <WallView
-        authNotice={authNotice}
-        ownerSession={ownerSession}
-        shouldOpenLogin={shouldOpenWallLogin}
-        onAuthNotice={setAuthNotice}
-        onForgotPassword={() => navigateToRoute('forgot-password')}
-        onLoginRequestHandled={() => setShouldOpenWallLogin(false)}
-        onOwnerSessionChange={setOwnerSession}
-        resetViewSignal={wallResetToken}
-      />
+  async function change(board: Board, action: "rename" | "delete") {
+    if (!user) return;
+    const next = action === "rename" ? prompt("白板名称", board.title) : null;
+    if (action === "rename" && !next?.trim()) return;
+    if (
+      action === "delete" &&
+      !confirm(`永久删除“${board.title}”及其中的图片？`)
     )
+      return;
+    setBusy(true);
+    setNotice("");
+    try {
+      await api(`/boards/${board.id}`, {
+        method: action === "delete" ? "DELETE" : "PATCH",
+        ...(action === "rename"
+          ? { body: JSON.stringify({ title: next!.trim() }) }
+          : {}),
+      });
+      if (action === "delete") {
+        await removeDraft(user.id, board.id);
+        if (open?.board.id === board.id) setOpen(null);
+      }
+      await refresh();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBusy(false);
+    }
   }
-
-  return (
-    <div className="workspace-shell">
-      <div className="surface-slot">{renderRoute()}</div>
-
-      {route === 'wall' ? (
-        <nav
-          className={`workspace-brand-nav is-${route}`}
-          aria-label="PinWall navigation"
-          onMouseEnter={clearWorkspaceMenuCloseTimer}
-          onMouseLeave={route === 'wall' ? scheduleWorkspaceMenuClose : undefined}
-          onBlur={closeWorkspaceMenuOnBlur}
-        >
-          <button
-            className="brand brand-trigger"
-            type="button"
-            onClick={() => setIsWorkspaceMenuOpen((current) => !current)}
-            aria-expanded={isWorkspaceMenuOpen}
-            aria-haspopup="menu"
-          >
-            <span className="brand-pin" aria-hidden="true" />
-            <div>
-              <h1>PinWall</h1>
-            </div>
-          </button>
-
-          {isWorkspaceMenuOpen ? (
-            <div className="workspace-menu" role="menu">
-              <button type="button" role="menuitem" onClick={switchSurface}>
-                <ArrowLeftRight size={15} strokeWidth={2.1} aria-hidden="true" />
-                <span>{route === 'wall' ? 'Board' : 'Wall'}</span>
+  const login = loginOpen ? (
+    <ScanLogin onClose={() => setLoginOpen(false)} onSuccess={unlock} />
+  ) : null;
+  if (checking)
+    return (
+      <div className="center-state">
+        <span className="spinner" />
+        <p>正在打开白板…</p>
+      </div>
+    );
+  if (open?.draft && user)
+    return (
+      <>
+        <main className="center-state">
+          <section className="recovery-card">
+            <span className="eyebrow">LOCAL RECOVERY</span>
+            <h1>发现未同步的草稿</h1>
+            <p>保存于 {new Date(open.draft.savedAt).toLocaleString("zh-CN")}</p>
+            {open.draft.version !== open.board.version && (
+              <div className="notice">
+                云端已变化，请先导出草稿，再加载云端版本。
+              </div>
+            )}
+            <div className="recovery-actions">
+              <button
+                onClick={async () => {
+                  const { downloadSnapshot } = await import("./lib/scene");
+                  downloadSnapshot(
+                    open.draft!.snapshot,
+                    `${open.board.title}-草稿`,
+                  );
+                }}
+              >
+                <Download size={16} />
+                导出草稿
               </button>
-              {ownerSession ? (
-                <button type="button" role="menuitem" onClick={requestLogout} disabled={isAuthBusy}>
-                  <LogOut size={15} strokeWidth={2.1} aria-hidden="true" />
-                  <span>Log out</span>
-                </button>
-              ) : (
-                <button type="button" role="menuitem" onClick={openFloatingLogin}>
-                  <LogIn size={15} strokeWidth={2.1} aria-hidden="true" />
-                  <span>Log in</span>
+              {open.draft.version === open.board.version && (
+                <button
+                  className="primary"
+                  onClick={() =>
+                    setOpen({
+                      ...open,
+                      initial: open.draft!.snapshot,
+                      draft: undefined,
+                      recovered: true,
+                    })
+                  }
+                >
+                  恢复并同步
                 </button>
               )}
-            </div>
-          ) : null}
-        </nav>
-      ) : null}
-
-      {route === 'board' ? (
-        <button className="board-wall-switch" type="button" onClick={switchToWall} aria-label="Switch to Wall" title="Switch to Wall">
-          <ArrowLeftRight size={16} strokeWidth={2.05} aria-hidden="true" />
-        </button>
-      ) : null}
-
-      {isLogoutConfirmOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsLogoutConfirmOpen(false)}>
-          <section className="confirm-modal" role="dialog" aria-modal="true" aria-label="Confirm logout" onMouseDown={(event) => event.stopPropagation()}>
-            <h2>Leave owner mode?</h2>
-            <p>You will be signed out and editing controls will be hidden.</p>
-            <div className="confirm-actions">
-              <button className="quiet-button" type="button" onClick={() => setIsLogoutConfirmOpen(false)}>
-                Stay
+              <button
+                onClick={async () => {
+                  if (!confirm("放弃此本地草稿，加载云端版本？")) return;
+                  await removeDraft(user.id, open.board.id);
+                  setOpen({ ...open, draft: undefined });
+                }}
+              >
+                使用云端版本
               </button>
-              <button className="primary-button danger-action" type="button" onClick={logoutOwner} disabled={isAuthBusy}>
-                {isAuthBusy ? 'Leaving...' : 'Leave'}
+              <button
+                onClick={() => {
+                  setOpen(null);
+                  setListing(true);
+                }}
+              >
+                返回列表
               </button>
             </div>
           </section>
+        </main>
+      </>
+    );
+  const reload = () => {
+    if (open) void load(open.board.id, user).catch(showError);
+  };
+  const back = () => {
+    setListing(true);
+    void refresh().catch(showError);
+  };
+  if (!listing)
+    return (
+      <>
+        {notice && (
+          <div className="workspace-error" role="alert">
+            {notice}
+            <button onClick={() => void initialize()}>重试</button>
+          </div>
+        )}
+        <Suspense fallback={<div className="center-state">正在打开画布…</div>}>
+          {open && user ? (
+            <BoardEditor
+              key={`${open.board.id}:${open.board.version}`}
+              user={user}
+              board={open.board}
+              initial={open.initial}
+              recovered={open.recovered}
+              uploaded={open.board.images.map((i) => i.file_id)}
+              onBack={back}
+              onLogout={logout}
+              onReload={reload}
+            />
+          ) : (
+            <BoardViewer
+              board={open?.board || emptyBoard}
+              initial={open?.initial || emptyScene}
+              onBack={back}
+              onEdit={() => setLoginOpen(true)}
+              onReload={() => (open ? reload() : void initialize())}
+            />
+          )}
+        </Suspense>
+        {login}
+      </>
+    );
+  return (
+    <div className="library-page">
+      <header className="library-header">
+        <button className="wordmark quiet" onClick={() => setListing(false)}>
+          <Shapes size={24} />
+          白板
+        </button>
+        {user ? (
+          <button
+            className="quiet"
+            onClick={() => void logout().catch(showError)}
+            disabled={busy}
+          >
+            <LogOut size={16} />
+            退出编辑
+          </button>
+        ) : (
+          <button className="quiet" onClick={() => setLoginOpen(true)}>
+            <LockKeyhole size={16} />
+            手机授权编辑
+          </button>
+        )}
+      </header>
+      <main className="library-main">
+        <div className="library-heading">
+          <div>
+            <span className="eyebrow">A SPACE FOR YOUR NEXT IDEA</span>
+            <h1>
+              {user ? "我的白板" : "白板"}
+              <span className="count">
+                {boards.length.toString().padStart(2, "0")}
+              </span>
+            </h1>
+            <p>
+              {user
+                ? "画下来，保存好，下次接着想。"
+                : "访客可以查看，编辑需要手机授权。"}
+            </p>
+          </div>
         </div>
-      ) : null}
+        {user && (
+          <form
+            className="create-form"
+            onSubmit={(event) => void create(event)}
+          >
+            <Plus size={20} />
+            <input
+              aria-label="新白板名称"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={120}
+              placeholder="给新的想法起个名字…"
+            />
+            <button className="primary" disabled={busy}>
+              新建白板
+              <ArrowRight size={16} />
+            </button>
+          </form>
+        )}
+        {notice && (
+          <div className="notice" role="alert">
+            {notice}
+          </div>
+        )}
+        <div className="boards-grid">
+          {boards.map((board, index) => (
+            <article className="board-card" key={board.id}>
+              <button
+                className={`board-cover tone-${index % 4}`}
+                onClick={() => void load(board.id, user).catch(showError)}
+                disabled={busy}
+                aria-label={`打开 ${board.title}`}
+              >
+                <span className="cover-number">
+                  {(index + 1).toString().padStart(2, "0")}
+                </span>
+                <Shapes className="cover-shape" size={66} strokeWidth={1} />
+                <span className="open-label">打开白板 ↗</span>
+              </button>
+              <div className="board-info">
+                <button
+                  className="board-name"
+                  onClick={() => void load(board.id, user).catch(showError)}
+                  disabled={busy}
+                >
+                  {board.title}
+                </button>
+                <div className="board-meta">
+                  <span>
+                    {new Date(board.updated_at).toLocaleDateString("zh-CN")}{" "}
+                    更新
+                  </span>
+                  {user && (
+                    <div>
+                      <button
+                        className="icon-button"
+                        aria-label={`重命名 ${board.title}`}
+                        onClick={() => void change(board, "rename")}
+                        disabled={busy}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        className="icon-button delete"
+                        aria-label={`删除 ${board.title}`}
+                        onClick={() => void change(board, "delete")}
+                        disabled={busy}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        {!boards.length && (
+          <div className="empty-state">
+            <Shapes size={42} />
+            <h2>从一块白板开始。</h2>
+            {!user && (
+              <button className="primary" onClick={() => setLoginOpen(true)}>
+                手机扫码编辑
+              </button>
+            )}
+          </div>
+        )}
+        {busy && (
+          <p className="loading-note" role="status">
+            正在处理…
+          </p>
+        )}
+      </main>
+      {login}
     </div>
-  )
+  );
 }
-
-export default App
+function App() {
+  return location.pathname === "/phone" ? <PhonePage /> : <Workspace />;
+}
+export default App;

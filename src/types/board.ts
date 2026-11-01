@@ -1,28 +1,28 @@
-import type { ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types'
-
-export type BoardSceneSnapshot = {
-  type: 'excalidraw'
-  version: number
-  source: 'pinwall'
-  elements: NonNullable<ExcalidrawInitialDataState['elements']>
-  appState: NonNullable<ExcalidrawInitialDataState['appState']>
-  files: NonNullable<ExcalidrawInitialDataState['files']>
-  updated_at: string
-}
-
-export type BoardRecord = {
-  id: string
-  title: string
-  slug: string
-  scene_json: BoardSceneSnapshot
-  is_public: boolean
-  owner_id: string | null
-  created_at: string
-  updated_at: string
-}
-
-export type LoadedBoardScene = {
-  boardId: string
-  slug: string
-  scene: BoardSceneSnapshot
-}
+import type {
+  ExcalidrawInitialDataState,
+  BinaryFiles,
+} from "@excalidraw/excalidraw/types";
+export type Scene = {
+  elements: NonNullable<ExcalidrawInitialDataState["elements"]>;
+  appState: { viewBackgroundColor?: string; gridSize?: number };
+};
+export type Snapshot = { scene: Scene; files: BinaryFiles };
+export type Board = {
+  id: string;
+  title: string;
+  version: number;
+  updated_at: string;
+  created_at: string;
+};
+export type LoadedBoard = Board & {
+  scene_json: Scene;
+  images: { file_id: string; mime_type: string; created_at: string }[];
+};
+export type User = { id: string };
+export type Draft = {
+  owner: string;
+  board: string;
+  version: number;
+  snapshot: Snapshot;
+  savedAt: number;
+};
