@@ -20,6 +20,7 @@ import {
 import type { Board, Draft, LoadedBoard, Snapshot, User } from "./types/board";
 import { api, ApiError } from "./lib/api";
 import { clearDrafts, getDraft, removeDraft } from "./lib/drafts";
+import { boardFromUrl, loadedBoardUrl } from "./lib/boardLocation";
 import { PhonePage } from "./views/PhonePage";
 import { ScanLogin } from "./views/ScanLogin";
 import "./App.css";
@@ -35,8 +36,7 @@ type OpenBoard = {
   draft?: Draft;
   recovered: boolean;
 };
-const boardFromHash = () =>
-  /^#[0-9a-f-]{36}$/.test(location.hash) ? location.hash.slice(1) : null;
+const boardFromLocation = () => boardFromUrl(location.href);
 const emptyBoard: Board = {
   id: "empty",
   title: "白板",
@@ -79,7 +79,7 @@ function Workspace() {
       if (current !== generation.current) return;
       setOpen({ board, initial, draft, recovered: false });
       setListing(false);
-      history.replaceState(null, "", `#${id}`);
+      history.replaceState(null, "", loadedBoardUrl(location.href, id));
     } finally {
       if (current === generation.current) setBusy(false);
     }
@@ -93,7 +93,7 @@ function Workspace() {
         throw error;
       });
       const rows = await refresh();
-      const id = boardFromHash() || rows[0]?.id;
+      const id = boardFromLocation() || rows[0]?.id;
       if (id) await load(id, me);
       setUser(me);
     } catch (error) {
@@ -108,7 +108,7 @@ function Workspace() {
   const visitor = useCallback(async () => {
     window.dispatchEvent(new Event("whiteboard-lock"));
     generation.current++;
-    const id = boardFromHash();
+    const id = boardFromLocation();
     setUser(null);
     setOpen(null);
     setLoginOpen(false);
@@ -143,7 +143,7 @@ function Workspace() {
       rows = [board];
       setBoards(rows);
     }
-    await load(open?.board.id || boardFromHash() || rows[0].id, me);
+    await load(open?.board.id || boardFromLocation() || rows[0].id, me);
     setUser(me);
   }
   async function logout() {

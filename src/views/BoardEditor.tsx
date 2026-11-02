@@ -1,4 +1,9 @@
-import { Excalidraw, MainMenu, loadFromBlob } from "@excalidraw/excalidraw";
+import {
+  Excalidraw,
+  MainMenu,
+  loadFromBlob,
+  useHandleLibrary,
+} from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -13,6 +18,7 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { Board, Snapshot, User } from "../types/board";
 import { SaveQueue, type SaveStatus } from "../lib/saveQueue";
 import { putDraft, removeDraft } from "../lib/drafts";
+import { libraryReturnUrl } from "../lib/boardLocation";
 import {
   downloadSnapshot,
   persistSnapshot,
@@ -51,7 +57,16 @@ export function BoardEditor({
   const [draftError, setDraftError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const api = useRef<ExcalidrawImperativeAPI | null>(null);
+  const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  useHandleLibrary({ excalidrawAPI: api });
+  useEffect(() => {
+    // The library catalogue targets this tab when installing a library.
+    const previousName = window.name;
+    window.name = `whiteboard${crypto.randomUUID().replaceAll("-", "")}`;
+    return () => {
+      window.name = previousName;
+    };
+  }, []);
   const input = useRef<HTMLInputElement>(null);
   const sig = useRef(signature(initial.scene));
   const mounted = useRef(true);
@@ -141,15 +156,15 @@ export function BoardEditor({
     try {
       if (file.size > 30 * 1024 * 1024) throw new Error("导入文件最大 30 MB。");
       const scene = await loadFromBlob(file, null, null);
-      if (!api.current) return;
+      if (!api) return;
       if (!window.confirm("用导入文件替换当前画布？建议先导出当前白板。"))
         return;
-      if (scene.files) api.current.addFiles(Object.values(scene.files));
-      api.current.updateScene({
+      if (scene.files) api.addFiles(Object.values(scene.files));
+      api.updateScene({
         elements: scene.elements,
         appState: scene.appState,
       });
-      api.current.scrollToContent();
+      api.scrollToContent();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "导入失败。");
     }
@@ -176,6 +191,7 @@ export function BoardEditor({
           }}
           langCode="zh-CN"
           name={board.title}
+          libraryReturnUrl={libraryReturnUrl(location.href, board.id)}
           renderTopRightUI={() => (
             <button
               className="excalidraw-owner-button is-owner"
@@ -188,9 +204,7 @@ export function BoardEditor({
               <span className={`edit-save-dot is-${queue.status}`} />
             </button>
           )}
-          excalidrawAPI={(value) => {
-            api.current = value;
-          }}
+          excalidrawAPI={setApi}
           onChange={(elements, state, files) => {
             const value = snapshot(elements, state, files);
             const next = signature(value.scene);
