@@ -458,6 +458,7 @@
   gap: 8px;
 }
 .excalidraw .excalidraw-presentation-button {
+  width: 36px;
   height: 36px;
   padding: 0 10px;
   border: 0;
@@ -470,16 +471,14 @@
 .canvas-surface.is-presenting .excalidraw .layer-ui__wrapper {
   visibility: hidden;
 }
-.canvas-surface.is-presenting {
-  pointer-events: none;
-}
 .presentation-overlay {
   position: absolute;
   inset: 0;
   z-index: 6;
-  touch-action: none;
+  pointer-events: none;
 }
 .presentation-controls {
+  pointer-events: auto;
   position: absolute;
   bottom: 0;
   width: 100%;

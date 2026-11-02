@@ -1,9 +1,9 @@
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { presentationFrames, presentationPage } from "./framePresentation";
+import { presentationFrames, presentationPage, presentationZoom } from "./framePresentation";
 
-type View = Pick<AppState, "scrollX" | "scrollY" | "zoom" | "viewModeEnabled">;
+type View = Pick<AppState, "scrollX" | "scrollY" | "zoom" | "viewModeEnabled" | "frameRendering">;
 
 export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
   const [slides, setSlides] = useState<ReturnType<typeof presentationFrames>>([]);
@@ -18,9 +18,12 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
       api.setToast({ message: "请先创建画框，再开始演示。", closable: true });
       return;
     }
-    const { scrollX, scrollY, zoom, viewModeEnabled } = api.getAppState();
-    previous.current = { scrollX, scrollY, zoom: { ...zoom }, viewModeEnabled };
-    api.updateScene({ appState: { viewModeEnabled: true }, captureUpdate: CaptureUpdateAction.NEVER });
+    const { scrollX, scrollY, zoom, viewModeEnabled, frameRendering } = api.getAppState();
+    previous.current = { scrollX, scrollY, zoom: { ...zoom }, viewModeEnabled, frameRendering: { ...frameRendering } };
+    api.updateScene({
+      appState: { viewModeEnabled: true, frameRendering: { ...frameRendering, outline: false, name: false } },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
     setIndex(0);
     setSlides(frames);
   };
@@ -36,6 +39,14 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
   const move = useCallback((delta: number) => {
     setIndex((page) => presentationPage(page, delta, slides.length));
   }, [slides.length]);
+
+  const zoom = useCallback((factor: number) => {
+    if (!api || !previous.current) return;
+    api.updateScene({
+      appState: presentationZoom(api.getAppState(), factor),
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  }, [api]);
 
   useEffect(() => {
     if (!api || !active) return;
@@ -62,6 +73,8 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
       if (event.key === "Escape") exit();
       else if (event.key === "ArrowLeft") move(-1);
       else if (event.key === "ArrowRight") move(1);
+      else if (event.key === "+" || event.key === "=") zoom(1.2);
+      else if (event.key === "-") zoom(1 / 1.2);
       else if (event.key === "Tab" || ((event.key === "Enter" || event.key === " ") &&
         event.target instanceof Element && event.target.closest(".presentation-controls"))) return;
       event.preventDefault();
@@ -69,7 +82,7 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
     };
     window.addEventListener("keydown", keyboard, true);
     return () => window.removeEventListener("keydown", keyboard, true);
-  }, [active, exit, move]);
+  }, [active, exit, move, zoom]);
 
-  return { active, start, exit, move, index, count: slides.length };
+  return { active, start, exit, move, zoom, index, count: slides.length };
 }

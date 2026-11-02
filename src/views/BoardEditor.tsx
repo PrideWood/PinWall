@@ -191,7 +191,10 @@ export function BoardEditor({
         </div>
       )}
       <main className="canvas">
-        <div className={`canvas-surface${presentation.active ? " is-presenting" : ""}`} inert={presentation.active}>
+        <div
+          className={`canvas-surface${presentation.active ? " is-presenting" : ""}`}
+          onContextMenuCapture={presentation.active ? (event) => { event.preventDefault(); event.stopPropagation(); } : undefined}
+        >
           <Excalidraw
             initialData={{
               ...initial.scene,
@@ -205,8 +208,8 @@ export function BoardEditor({
             libraryReturnUrl={libraryReturnUrl(location.href, board.id)}
             renderTopRightUI={() => (
               <div className="canvas-toolbar-actions">
-                <button className="excalidraw-presentation-button" onClick={presentation.start} disabled={!api || busy}>
-                  <Presentation size={18} />演示
+                <button className="excalidraw-presentation-button" aria-label="演示" title="演示" onClick={presentation.start} disabled={!api || busy}>
+                  <Presentation size={18} />
                 </button>
                 <button
                   className="excalidraw-owner-button is-owner"

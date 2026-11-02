@@ -26,7 +26,10 @@ export function BoardViewer({
   return (
     <div className="editor-shell">
       <main className="canvas">
-        <div className={`canvas-surface${presentation.active ? " is-presenting" : ""}`} inert={presentation.active}>
+        <div
+          className={`canvas-surface${presentation.active ? " is-presenting" : ""}`}
+          onContextMenuCapture={presentation.active ? (event) => { event.preventDefault(); event.stopPropagation(); } : undefined}
+        >
           <Excalidraw
             excalidrawAPI={setApi}
             key={`${board.id}:${board.version}`}
@@ -42,8 +45,8 @@ export function BoardViewer({
             langCode="zh-CN"
             renderTopRightUI={() => (
               <div className="canvas-toolbar-actions">
-                <button className="excalidraw-presentation-button" onClick={presentation.start} disabled={!api}>
-                  <Presentation size={18} />演示
+                <button className="excalidraw-presentation-button" aria-label="演示" title="演示" onClick={presentation.start} disabled={!api}>
+                  <Presentation size={18} />
                 </button>
                 <button
                   className="excalidraw-owner-button"
