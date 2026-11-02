@@ -705,6 +705,15 @@
   border-radius: var(--border-radius-lg, 8px);
 }
 
+/* Native mobile menus use 100% of the parent; the compact trigger must not
+   determine the expanded menu's width. Keep the menu inside the safe area. */
+.excalidraw.excalidraw--mobile.excalidraw--view-mode .App-bottom-bar .dropdown-menu--mobile {
+  width: min(
+    17.5rem,
+    calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 52px)
+  );
+}
+
 :root[data-theme="dark"] .scan-dialog,
 :root[data-theme="dark"] .phone-card,
 :root[data-theme="dark"] .recovery-card,
