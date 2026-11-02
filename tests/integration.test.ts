@@ -102,6 +102,15 @@ test(
           "utf8",
         ),
       );
+      await db().query(
+        await readFile(
+          new URL(
+            "../migrations/003-trusted-phone-sessions.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
       assert.equal((await request("/boards")).status, 200);
       assert.equal(
         (
@@ -159,6 +168,87 @@ test(
         401,
         "A trusted phone is not automatically an editor",
       );
+      assert.equal(
+        (await request("/auth/owner/trusted-edit", "POST", "", {})).status,
+        401,
+        "Visitors cannot create trusted-device sessions",
+      );
+      assert.equal(
+        (
+          await request(
+            "/auth/owner/trusted-edit",
+            "POST",
+            `whiteboard-phone=${randomBytes(32).toString("hex")}`,
+            {},
+          )
+        ).status,
+        401,
+        "A forged phone cookie is rejected by the server",
+      );
+      const directLogin = await request(
+        "/auth/owner/trusted-edit",
+        "POST",
+        phone,
+        {},
+      );
+      assert.equal(directLogin.status, 200, await directLogin.clone().text());
+      const directSession = cookies(directLogin);
+      const phoneEditor = `${phone}; ${directSession}`;
+      assert.equal((await request("/me", "GET", phoneEditor)).status, 200);
+      assert.equal(
+        (await request("/me", "GET", directSession)).status,
+        401,
+        "A long session also requires the original trusted-phone credential",
+      );
+      const longSession = await db().query(
+        'SELECT "expiresAt" FROM session WHERE "trustedPhoneId" IS NOT NULL',
+      );
+      const lifetime =
+        new Date(longSession.rows[0].expiresAt).getTime() - Date.now();
+      assert.ok(lifetime > 179 * 86400000 && lifetime <= 180 * 86400000);
+      const cookieMaxAge = /Max-Age=(\d+)/i.exec(
+        directLogin.headers.getSetCookie().join(";"),
+      );
+      assert.ok(
+        cookieMaxAge && Number(cookieMaxAge[1]) > 179 * 86400,
+        "The browser cookie persists as long as the trusted-device session",
+      );
+      await db().query(
+        "UPDATE trusted_phones SET expires_at=now()-interval '1 second'",
+      );
+      assert.equal(
+        (await request("/me", "GET", phoneEditor)).status,
+        401,
+        "Expiring the phone binding immediately blocks an existing long session",
+      );
+      assert.equal(
+        (await request("/auth/owner/trusted-edit", "POST", phone, {})).status,
+        401,
+      );
+      await db().query(
+        "UPDATE trusted_phones SET expires_at=now()+interval '180 days'",
+      );
+      assert.equal(
+        (await request("/auth/sign-out", "POST", phoneEditor, {})).status,
+        200,
+      );
+      assert.equal(
+        (await request("/me", "GET", phoneEditor)).status,
+        401,
+        "Logout invalidates the trusted-device editing session",
+      );
+      const resumed = await request(
+        "/auth/owner/trusted-edit",
+        "POST",
+        phone,
+        {},
+      );
+      assert.equal(
+        resumed.status,
+        200,
+        "A bound device can explicitly enter again without scanning",
+      );
+      const resumedPhone = `${phone}; ${cookies(resumed)}`;
       assert.equal(
         (await request("/owner/login", "POST", "", { password: "qa6!ok" }))
           .status,
@@ -247,6 +337,16 @@ test(
       const a = await login(),
         b = await login();
       assert.notEqual(a, b);
+      const desktopSessions = await db().query(
+        'SELECT "expiresAt" FROM session WHERE "trustedPhoneId" IS NULL',
+      );
+      assert.ok(desktopSessions.rows.length >= 2);
+      for (const row of desktopSessions.rows) {
+        assert.ok(
+          new Date(row.expiresAt).getTime() - Date.now() <= 12 * 3600000,
+          "Ordinary browser approval remains limited to 12 hours",
+        );
+      }
       const created = await request("/boards", "POST", a, {
         title: "跨设备测试",
       });
@@ -397,6 +497,15 @@ test(
       assert.equal(
         (await (await request("/phone/status", "GET", phone)).json()).trusted,
         false,
+      );
+      assert.equal(
+        (await request("/me", "GET", resumedPhone)).status,
+        401,
+        "Revoking a phone also invalidates its long editing sessions",
+      );
+      assert.equal(
+        (await request("/auth/owner/trusted-edit", "POST", phone, {})).status,
+        401,
       );
       assert.equal(
         (await request("/phone/request", "POST", phone, { token: deniedToken }))

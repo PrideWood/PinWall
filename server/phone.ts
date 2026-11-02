@@ -46,7 +46,7 @@ async function throttle(headers: Headers, action: string, limit: number) {
   if (result.rows[0].count > limit)
     throw new ApprovalError(429, "尝试次数过多，请稍后再试。");
 }
-async function trustedPhone(headers: Headers) {
+export async function trustedPhone(headers: Headers) {
   const value = cookieValue(headers, phoneCookie);
   if (!tokenSchema.safeParse(value).success) return null;
   const { rows } = await db().query(
@@ -136,11 +136,15 @@ export async function phoneRoutes(request: Request): Promise<Response | null> {
   }
   if (path === "/api/phone/revoke" && request.method === "POST") {
     const phone = await trustedPhone(request.headers);
-    if (phone)
+    if (phone) {
       await db().query(
         "UPDATE trusted_phones SET revoked_at=now() WHERE id=$1",
         [phone.id],
       );
+      await db().query('DELETE FROM session WHERE "trustedPhoneId"=$1', [
+        phone.id,
+      ]);
+    }
     const response = json({ trusted: false });
     response.headers.set("Set-Cookie", setCookie(phoneCookie, "", 0));
     return response;

@@ -8,7 +8,9 @@ type Ticket = {
   expiresAt: string;
 };
 export function PhonePage() {
-  const [context, setContext] = useState(() => new URLSearchParams(location.hash.slice(1)));
+  const [context, setContext] = useState(
+    () => new URLSearchParams(location.hash.slice(1)),
+  );
   const pair = context.get("pair");
   const request = context.get("request");
   const [trusted, setTrusted] = useState(false);
@@ -19,12 +21,17 @@ export function PhonePage() {
   const [result, setResult] = useState("");
   const [matched, setMatched] = useState(false);
   useEffect(() => {
-    const changed = () => setContext(new URLSearchParams(location.hash.slice(1)));
+    const changed = () =>
+      setContext(new URLSearchParams(location.hash.slice(1)));
     window.addEventListener("hashchange", changed);
     return () => window.removeEventListener("hashchange", changed);
   }, []);
   useEffect(() => {
-    setReady(false); setTicket(null); setResult(""); setError(""); setMatched(false);
+    setReady(false);
+    setTicket(null);
+    setResult("");
+    setError("");
+    setMatched(false);
     history.replaceState(null, "", "/phone");
     let active = true;
     async function load() {
@@ -83,6 +90,17 @@ export function PhonePage() {
       setBusy(false);
     }
   }
+  async function editHere() {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/auth/owner/trusted-edit", { method: "POST", body: "{}" });
+      location.assign("/");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "授权失败，请重试。");
+      setBusy(false);
+    }
+  }
   return (
     <main className="phone-page">
       <section className="phone-card">
@@ -118,6 +136,13 @@ export function PhonePage() {
             <p className="fineprint">
               身份保留最长 180 天。清除浏览器数据或使用无痕模式后需要重新绑定。
             </p>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => void editHere()}
+            >
+              {busy ? "正在进入…" : "在此设备编辑白板"}
+            </button>
           </>
         ) : pair ? (
           <>
@@ -179,6 +204,15 @@ export function PhonePage() {
                 ? "用这部手机扫描电脑上的编辑二维码，就可以授权。"
                 : "请先在可信电脑运行 npm run phone:pair，扫描一次性绑定二维码。"}
             </p>
+            {trusted && (
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => void editHere()}
+              >
+                {busy ? "正在进入…" : "在此设备编辑白板"}
+              </button>
+            )}
             {trusted && (
               <button
                 className="quiet"

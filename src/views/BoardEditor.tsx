@@ -19,6 +19,7 @@ import type { Board, Snapshot, User } from "../types/board";
 import { SaveQueue, type SaveStatus } from "../lib/saveQueue";
 import { putDraft, removeDraft } from "../lib/drafts";
 import { libraryReturnUrl } from "../lib/boardLocation";
+import { useCanvasTheme } from "../lib/theme";
 import {
   downloadSnapshot,
   persistSnapshot,
@@ -53,6 +54,7 @@ export function BoardEditor({
   onLogout,
   onReload,
 }: Props) {
+  const [theme, setTheme] = useCanvasTheme();
   const [, render] = useState(0);
   const [draftError, setDraftError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -190,6 +192,8 @@ export function BoardEditor({
             scrollToContent: true,
           }}
           langCode="zh-CN"
+          theme={theme}
+          UIOptions={{ canvasActions: { toggleTheme: true } }}
           name={board.title}
           libraryReturnUrl={libraryReturnUrl(location.href, board.id)}
           renderTopRightUI={() => (
@@ -206,6 +210,7 @@ export function BoardEditor({
           )}
           excalidrawAPI={setApi}
           onChange={(elements, state, files) => {
+            setTheme(state.theme);
             const value = snapshot(elements, state, files);
             const next = signature(value.scene);
             if (next === sig.current) return;

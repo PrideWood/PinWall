@@ -4,13 +4,29 @@
   font-display: swap;
 }
 :root {
+  --page-bg: #ffffff;
+  --surface-bg: #ffffff;
+  --page-text: #1b1b1f;
+  --page-border: #e6e6ec;
   font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #1b1b1f;
-  background: #ffffff;
+  color: var(--page-text);
+  background: var(--page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   font-weight: 400;
+}
+:root[data-theme="dark"] {
+  --page-bg: #121212;
+  --surface-bg: #232329;
+  --page-text: #e3e3e8;
+  --page-border: #414149;
+}
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--page-bg);
 }
 * {
   box-sizing: border-box;
@@ -44,8 +60,8 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #e6e6ec;
-  background: white;
+  border: 1px solid var(--page-border);
+  background: var(--surface-bg);
   color: inherit;
   border-radius: 9px;
   padding: 10px 14px;
@@ -56,10 +72,10 @@ button:hover:enabled {
 }
 input {
   min-width: 0;
-  border: 1px solid #e6e6ec;
+  border: 1px solid var(--page-border);
   border-radius: 9px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--surface-bg);
   color: inherit;
 }
 input:focus {

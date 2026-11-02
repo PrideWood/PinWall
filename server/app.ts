@@ -1,4 +1,4 @@
-import { phoneRoutes, ApprovalError } from "./phone.js";
+import { phoneRoutes, ApprovalError, trustedPhone } from "./phone.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { auth } from "./auth.js";
@@ -56,13 +56,27 @@ async function routes(request: Request): Promise<Response> {
   const phoneResponse = await phoneRoutes(request);
   if (phoneResponse) return phoneResponse;
   if (
-    ["/api/auth/sign-out", "/api/auth/owner/claim-edit"].includes(path) &&
+    [
+      "/api/auth/sign-out",
+      "/api/auth/owner/claim-edit",
+      "/api/auth/owner/trusted-edit",
+    ].includes(path) &&
     request.method === "POST"
   )
     return auth().handler(request);
   if (path.startsWith("/api/auth/") || path === "/api/owner/login")
     throw new HttpError(404, "接口不存在。");
   const session = await auth().api.getSession({ headers: request.headers });
+  if (session?.session.trustedPhoneId) {
+    const phone = await trustedPhone(request.headers);
+    if (
+      !phone ||
+      phone.id !== session.session.trustedPhoneId ||
+      phone.owner_id !== session.user.id
+    ) {
+      throw new HttpError(401, "此设备授权已失效，请重新绑定。");
+    }
+  }
   if (session && session.user.email.toLowerCase() !== ownerEmail())
     throw new HttpError(403, "此账号没有编辑权限。");
   if (path === "/api/me" && request.method === "GET") {

@@ -23,21 +23,28 @@ export function ScanLogin({
   const [state, setState] = useState("loading");
   const [generation, setGeneration] = useState(0);
   const [seconds, setSeconds] = useState(180);
+  const [trusted, setTrusted] = useState(false);
   const success = useRef(onSuccess);
-  success.current = onSuccess;
   const close = useRef(onClose);
-  close.current = onClose;
+  useEffect(() => {
+    success.current = onSuccess;
+    close.current = onClose;
+  }, [onSuccess, onClose]);
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    setState("loading");
-    setError("");
-    setTicket(null);
     async function start() {
       try {
+        const device = await api<{ trusted: boolean }>("/phone/status");
+        if (!active) return;
+        if (device.trusted) {
+          setTrusted(true);
+          setState("ready");
+          return;
+        }
         const value = await api<Ticket>("/edit-requests", { method: "POST" });
         const image = await QRCode.toDataURL(value.url, {
           width: 248,
@@ -115,6 +122,18 @@ export function ScanLogin({
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [ticket]);
+  async function editHere() {
+    setState("claiming");
+    setError("");
+    try {
+      await api("/auth/owner/trusted-edit", { method: "POST", body: "{}" });
+      await onSuccess();
+      onClose();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "授权失败，请重试。");
+      setState("failed");
+    }
+  }
   return (
     <dialog
       ref={dialog}
@@ -134,10 +153,22 @@ export function ScanLogin({
         <X size={18} />
       </button>
       <Smartphone size={27} />
-      <h2 id="scan-title">用手机解锁编辑</h2>
-      <p>用已绑定的手机扫码，核对授权码后确认。</p>
+      <h2 id="scan-title">{trusted ? "此设备已受信任" : "用手机解锁编辑"}</h2>
+      <p>
+        {trusted
+          ? "直接在此设备编辑，无需扫码。授权保留至手机绑定到期，最长 180 天。"
+          : "用已绑定的手机扫码，核对授权码后确认。"}
+      </p>
       {state === "loading" ? (
         <div className="qr-loading">正在生成二维码…</div>
+      ) : trusted ? (
+        <button
+          className="primary"
+          disabled={state === "claiming"}
+          onClick={() => void editHere()}
+        >
+          {state === "claiming" ? "正在进入…" : "在此设备编辑"}
+        </button>
       ) : (
         ticket && (
           <>
@@ -167,13 +198,26 @@ export function ScanLogin({
           {error}
         </div>
       )}
-      {state !== "claiming" && (
-        <button className="quiet" onClick={() => setGeneration((v) => v + 1)}>
+      {state !== "claiming" && !trusted && (
+        <button
+          className="quiet"
+          onClick={() => {
+            setState("loading");
+            setError("");
+            setTicket(null);
+            setTrusted(false);
+            setGeneration((v) => v + 1);
+          }}
+        >
           <RefreshCw size={15} />
           刷新二维码
         </button>
       )}
-      <p className="fineprint">无需密码或蓝牙。首次使用请先绑定手机。</p>
+      <p className="fineprint">
+        {trusted
+          ? "退出编辑后可再次点击进入；解除绑定会撤销此设备的长期授权。"
+          : "无需密码或蓝牙。首次使用请先绑定当前浏览器。"}
+      </p>
     </dialog>
   );
 }

@@ -22,7 +22,11 @@ export function createAuth(bootstrap = false) {
     session: {
       expiresIn: 60 * 60 * 12,
       updateAge: 60 * 60,
+      disableSessionRefresh: true,
       cookieCache: { enabled: false },
+      additionalFields: {
+        trustedPhoneId: { type: "string", required: false, input: false },
+      },
     },
     rateLimit: {
       enabled: true,
