@@ -1,0 +1,43 @@
+.confirm-exit-dialog {
+  width: min(400px, calc(100vw - 36px));
+  padding: 28px;
+  border: 1px solid var(--page-border);
+  border-radius: 16px;
+  color: var(--page-text);
+  background: var(--surface-bg);
+  box-shadow: 0 16px 64px #00000030;
+}
+.confirm-exit-dialog::backdrop {
+  background: #00000050;
+}
+.confirm-exit-icon {
+  color: #8783ed;
+}
+.confirm-exit-dialog h2 {
+  margin: 18px 0 12px;
+  font-size: 20px;
+  font-weight: 550;
+}
+.confirm-exit-dialog p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.confirm-exit-dialog .confirm-exit-error {
+  margin-top: 12px;
+  color: #d16853;
+}
+.confirm-exit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+}
+.confirm-exit-actions button {
+  font-size: 13px;
+}
+:root[data-theme="dark"]
+  .confirm-exit-actions
+  button:not(.primary):hover:enabled {
+  background: #363640;
+}

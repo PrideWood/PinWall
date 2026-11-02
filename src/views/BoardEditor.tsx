@@ -20,6 +20,7 @@ import { SaveQueue, type SaveStatus } from "../lib/saveQueue";
 import { putDraft, removeDraft } from "../lib/drafts";
 import { libraryReturnUrl } from "../lib/boardLocation";
 import { useCanvasTheme } from "../lib/theme";
+import { ConfirmExitDialog } from "./ConfirmExitDialog";
 import {
   downloadSnapshot,
   persistSnapshot,
@@ -59,6 +60,7 @@ export function BoardEditor({
   const [draftError, setDraftError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [confirmExit, setConfirmExit] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   useHandleLibrary({ excalidrawAPI: api });
   useEffect(() => {
@@ -201,7 +203,10 @@ export function BoardEditor({
               className="excalidraw-owner-button is-owner"
               aria-label="退出编辑"
               title={`编辑中 · ${labels[queue.status]} · 点击退出编辑`}
-              onClick={() => void leave("logout")}
+              onClick={() => {
+                setMessage("");
+                setConfirmExit(true);
+              }}
               disabled={busy}
             >
               <Smartphone size={18} />
@@ -259,6 +264,14 @@ export function BoardEditor({
           </MainMenu>
         </Excalidraw>
       </main>
+      {confirmExit && (
+        <ConfirmExitDialog
+          busy={busy}
+          error={message}
+          onCancel={() => setConfirmExit(false)}
+          onConfirm={() => void leave("logout")}
+        />
+      )}
       <input
         ref={input}
         type="file"
