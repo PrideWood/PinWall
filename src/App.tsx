@@ -23,6 +23,7 @@ import { clearDrafts, getDraft, removeDraft } from "./lib/drafts";
 import { boardFromUrl, loadedBoardUrl } from "./lib/boardLocation";
 import { PhonePage } from "./views/PhonePage";
 import { ScanLogin } from "./views/ScanLogin";
+import { RenameBoardDialog } from "./views/RenameBoardDialog";
 import "./App.css";
 const BoardEditor = lazy(() =>
   import("./views/BoardEditor").then((m) => ({ default: m.BoardEditor })),
@@ -57,6 +58,7 @@ function Workspace() {
   const [open, setOpen] = useState<OpenBoard | null>(null);
   const [listing, setListing] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [renaming, setRenaming] = useState<Board | null>(null);
   const [title, setTitle] = useState("");
   const channel = useRef<BroadcastChannel | null>(null);
   const generation = useRef(0);
@@ -172,28 +174,33 @@ function Workspace() {
       setBusy(false);
     }
   }
-  async function change(board: Board, action: "rename" | "delete") {
+  async function renameBoard(board: Board, title: string) {
+    if (!user) throw new Error("请先授权编辑。");
+    const updated = await api<Board>(`/boards/${board.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    });
+    setBoards((rows) =>
+      rows.map((row) => (row.id === board.id ? updated : row)),
+    );
+    setOpen((current) =>
+      current?.board.id === board.id
+        ? { ...current, board: { ...current.board, ...updated } }
+        : current,
+    );
+    setRenaming(null);
+  }
+  async function deleteBoard(board: Board) {
     if (!user) return;
-    const next = action === "rename" ? prompt("白板名称", board.title) : null;
-    if (action === "rename" && !next?.trim()) return;
-    if (
-      action === "delete" &&
-      !confirm(`永久删除“${board.title}”及其中的图片？`)
-    )
-      return;
+    if (!confirm(`永久删除“${board.title}”及其中的图片？`)) return;
     setBusy(true);
     setNotice("");
     try {
       await api(`/boards/${board.id}`, {
-        method: action === "delete" ? "DELETE" : "PATCH",
-        ...(action === "rename"
-          ? { body: JSON.stringify({ title: next!.trim() }) }
-          : {}),
+        method: "DELETE",
       });
-      if (action === "delete") {
-        await removeDraft(user.id, board.id);
-        if (open?.board.id === board.id) setOpen(null);
-      }
+      await removeDraft(user.id, board.id);
+      if (open?.board.id === board.id) setOpen(null);
       await refresh();
     } catch (error) {
       showError(error);
@@ -413,7 +420,7 @@ function Workspace() {
                       <button
                         className="icon-button"
                         aria-label={`重命名 ${board.title}`}
-                        onClick={() => void change(board, "rename")}
+                        onClick={() => setRenaming(board)}
                         disabled={busy}
                       >
                         <Pencil size={14} />
@@ -421,7 +428,7 @@ function Workspace() {
                       <button
                         className="icon-button delete"
                         aria-label={`删除 ${board.title}`}
-                        onClick={() => void change(board, "delete")}
+                        onClick={() => void deleteBoard(board)}
                         disabled={busy}
                       >
                         <Trash2 size={14} />
@@ -451,6 +458,14 @@ function Workspace() {
         )}
       </main>
       {login}
+      {renaming && user && (
+        <RenameBoardDialog
+          key={renaming.id}
+          title={renaming.title}
+          onClose={() => setRenaming(null)}
+          onSave={(title) => renameBoard(renaming, title)}
+        />
+      )}
     </div>
   );
 }
