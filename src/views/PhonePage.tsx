@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, ShieldCheck, Smartphone } from "lucide-react";
 import { api } from "../lib/api";
+import { isStandalone } from "../lib/devicePairing";
+import { StandalonePairing } from "./StandalonePairing";
 type Ticket = {
   code: string;
   device: string;
@@ -8,6 +10,7 @@ type Ticket = {
   expiresAt: string;
 };
 export function PhonePage() {
+  const [standalone] = useState(() => isStandalone());
   const [context, setContext] = useState(
     () => new URLSearchParams(location.hash.slice(1)),
   );
@@ -204,6 +207,15 @@ export function PhonePage() {
                 ? "用这部手机扫描电脑上的编辑二维码，就可以授权。"
                 : "请先在可信电脑运行 npm run phone:pair，扫描一次性绑定二维码。"}
             </p>
+            {!trusted && standalone && (
+              <StandalonePairing
+                onPaired={() => {
+                  setTrusted(true);
+                  setResult("paired");
+                  setError("");
+                }}
+              />
+            )}
             {trusted && (
               <button
                 className="primary"

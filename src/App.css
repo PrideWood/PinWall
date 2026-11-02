@@ -632,6 +632,25 @@
 .phone-card .fineprint {
   font-size: 11px;
 }
+.standalone-pairing {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 20px 0;
+  text-align: left;
+  font-size: 13px;
+}
+.standalone-pairing p {
+  margin: 0;
+  line-height: 1.7;
+  color: #6b6b76;
+}
+.standalone-pairing input {
+  width: 100%;
+}
+.standalone-pairing .notice {
+  margin: 0;
+}
 .phone-actions {
   display: flex;
   gap: 12px;
@@ -731,5 +750,8 @@
 }
 :root[data-theme="dark"] .scan-dialog > p,
 :root[data-theme="dark"] .phone-card p {
+  color: #b5b5c0;
+}
+:root[data-theme="dark"] .standalone-pairing p {
   color: #b5b5c0;
 }

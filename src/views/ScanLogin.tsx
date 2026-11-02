@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Smartphone, RefreshCw, X } from "lucide-react";
 import { api } from "../lib/api";
+import { isStandalone } from "../lib/devicePairing";
+import { StandalonePairing } from "./StandalonePairing";
 type Ticket = {
   id: string;
   secret: string;
@@ -24,6 +26,8 @@ export function ScanLogin({
   const [generation, setGeneration] = useState(0);
   const [seconds, setSeconds] = useState(180);
   const [trusted, setTrusted] = useState(false);
+  const [standalone] = useState(() => isStandalone());
+  const [useQr, setUseQr] = useState(false);
   const success = useRef(onSuccess);
   const close = useRef(onClose);
   useEffect(() => {
@@ -43,6 +47,10 @@ export function ScanLogin({
         if (device.trusted) {
           setTrusted(true);
           setState("ready");
+          return;
+        }
+        if (standalone && !useQr) {
+          setState("unbound");
           return;
         }
         const value = await api<Ticket>("/edit-requests", { method: "POST" });
@@ -106,7 +114,7 @@ export function ScanLogin({
       active = false;
       clearTimeout(timer);
     };
-  }, [generation]);
+  }, [generation, standalone, useQr]);
   useEffect(() => {
     if (!ticket) return;
     const update = () => {
@@ -146,21 +154,29 @@ export function ScanLogin({
     >
       <button
         className="icon-button close-login"
-        aria-label="关闭扫码授权"
+        aria-label="关闭授权面板"
         onClick={onClose}
         disabled={state === "claiming"}
       >
         <X size={18} />
       </button>
       <Smartphone size={27} />
-      <h2 id="scan-title">{trusted ? "此设备已受信任" : "用手机解锁编辑"}</h2>
+      <h2 id="scan-title">
+        {trusted
+          ? "此设备已受信任"
+          : standalone && !useQr
+            ? "绑定主屏幕应用"
+            : "用手机解锁编辑"}
+      </h2>
       <p>
         {trusted
           ? "直接在此设备编辑，无需扫码。授权保留至手机绑定到期，最长 180 天。"
-          : "用已绑定的手机扫码，核对授权码后确认。"}
+          : standalone && !useQr
+            ? "绑定后可直接编辑，授权最长保留 180 天。"
+            : "用已绑定的手机扫码，核对授权码后确认。"}
       </p>
       {state === "loading" ? (
-        <div className="qr-loading">正在生成二维码…</div>
+        <div className="qr-loading">正在确认设备…</div>
       ) : trusted ? (
         <button
           className="primary"
@@ -169,6 +185,14 @@ export function ScanLogin({
         >
           {state === "claiming" ? "正在进入…" : "在此设备编辑"}
         </button>
+      ) : standalone && !useQr ? (
+        <StandalonePairing
+          onPaired={() => {
+            setTrusted(true);
+            setState("ready");
+            setError("");
+          }}
+        />
       ) : (
         ticket && (
           <>
@@ -198,7 +222,7 @@ export function ScanLogin({
           {error}
         </div>
       )}
-      {state !== "claiming" && !trusted && (
+      {state !== "claiming" && !trusted && (!standalone || useQr) && (
         <button
           className="quiet"
           onClick={() => {
@@ -213,6 +237,22 @@ export function ScanLogin({
           刷新二维码
         </button>
       )}
+      {standalone &&
+        !trusted &&
+        state !== "loading" &&
+        state !== "claiming" && (
+          <button
+            className="quiet"
+            onClick={() => {
+              setUseQr((current) => !current);
+              setState("loading");
+              setError("");
+              setTicket(null);
+            }}
+          >
+            {useQr ? "返回绑定主屏幕应用" : "用其他手机扫码授权"}
+          </button>
+        )}
       <p className="fineprint">
         {trusted
           ? "退出编辑后可再次点击进入；解除绑定会撤销此设备的长期授权。"
