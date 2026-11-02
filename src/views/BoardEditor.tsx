@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Upload,
   Smartphone,
+  Presentation,
 } from "lucide-react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { Board, Snapshot, User } from "../types/board";
@@ -20,6 +21,8 @@ import { SaveQueue, type SaveStatus } from "../lib/saveQueue";
 import { putDraft, removeDraft } from "../lib/drafts";
 import { libraryReturnUrl } from "../lib/boardLocation";
 import { useCanvasTheme } from "../lib/theme";
+import { useFramePresentation } from "../lib/useFramePresentation";
+import { FramePresentation } from "./FramePresentation";
 import { ConfirmExitDialog } from "./ConfirmExitDialog";
 import {
   downloadSnapshot,
@@ -62,6 +65,7 @@ export function BoardEditor({
   const [message, setMessage] = useState("");
   const [confirmExit, setConfirmExit] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  const presentation = useFramePresentation(api);
   useHandleLibrary({ excalidrawAPI: api });
   useEffect(() => {
     // The library catalogue targets this tab when installing a library.
@@ -187,82 +191,90 @@ export function BoardEditor({
         </div>
       )}
       <main className="canvas">
-        <Excalidraw
-          initialData={{
-            ...initial.scene,
-            files: initial.files,
-            scrollToContent: true,
-          }}
-          langCode="zh-CN"
-          theme={theme}
-          UIOptions={{ canvasActions: { toggleTheme: true } }}
-          name={board.title}
-          libraryReturnUrl={libraryReturnUrl(location.href, board.id)}
-          renderTopRightUI={() => (
-            <button
-              className="excalidraw-owner-button is-owner"
-              aria-label="退出编辑"
-              title={`编辑中 · ${labels[queue.status]} · 点击退出编辑`}
-              onClick={() => {
-                setMessage("");
-                setConfirmExit(true);
-              }}
-              disabled={busy}
-            >
-              <Smartphone size={18} />
-              <span className={`edit-save-dot is-${queue.status}`} />
-            </button>
-          )}
-          excalidrawAPI={setApi}
-          onChange={(elements, state, files) => {
-            setTheme(state.theme);
-            const value = snapshot(elements, state, files);
-            const next = signature(value.scene);
-            if (next === sig.current) return;
-            sig.current = next;
-            queue.enqueue(value);
-          }}
-        >
-          <MainMenu>
-            <MainMenu.Item
-              icon={<ArrowLeft size={16} />}
-              onSelect={() => void leave("back")}
-            >
-              白板列表
-            </MainMenu.Item>
-            <MainMenu.Item
-              icon={<Upload size={16} />}
-              onSelect={() => input.current?.click()}
-            >
-              导入白板
-            </MainMenu.Item>
-            <MainMenu.Item
-              icon={<Download size={16} />}
-              onSelect={() => downloadSnapshot(queue.latest, board.title)}
-            >
-              导出白板备份
-            </MainMenu.Item>
-            <MainMenu.DefaultItems.SaveAsImage />
-            <MainMenu.DefaultItems.SearchMenu />
-            <MainMenu.DefaultItems.ClearCanvas />
-            <MainMenu.Item
-              icon={<RefreshCw size={16} />}
-              onSelect={() => void leave("reload")}
-            >
-              重新加载云端版本
-            </MainMenu.Item>
-            <MainMenu.Separator />
-            <MainMenu.DefaultItems.ToggleTheme />
-            <MainMenu.DefaultItems.ChangeCanvasBackground />
-            <MainMenu.DefaultItems.Help />
-            <MainMenu.Item
-              icon={<LogOut size={16} />}
-              onSelect={() => void leave("logout")}
-            >
-              退出编辑
-            </MainMenu.Item>
-          </MainMenu>
-        </Excalidraw>
+        <div className={`canvas-surface${presentation.active ? " is-presenting" : ""}`} inert={presentation.active}>
+          <Excalidraw
+            initialData={{
+              ...initial.scene,
+              files: initial.files,
+              scrollToContent: true,
+            }}
+            langCode="zh-CN"
+            theme={theme}
+            UIOptions={{ canvasActions: { toggleTheme: true } }}
+            name={board.title}
+            libraryReturnUrl={libraryReturnUrl(location.href, board.id)}
+            renderTopRightUI={() => (
+              <div className="canvas-toolbar-actions">
+                <button className="excalidraw-presentation-button" onClick={presentation.start} disabled={!api || busy}>
+                  <Presentation size={18} />演示
+                </button>
+                <button
+                  className="excalidraw-owner-button is-owner"
+                  aria-label="退出编辑"
+                  title={`编辑中 · ${labels[queue.status]} · 点击退出编辑`}
+                  onClick={() => {
+                    setMessage("");
+                    setConfirmExit(true);
+                  }}
+                  disabled={busy}
+                >
+                  <Smartphone size={18} />
+                  <span className={`edit-save-dot is-${queue.status}`} />
+                </button>
+              </div>
+            )}
+            excalidrawAPI={setApi}
+            onChange={(elements, state, files) => {
+              setTheme(state.theme);
+              const value = snapshot(elements, state, files);
+              const next = signature(value.scene);
+              if (next === sig.current) return;
+              sig.current = next;
+              queue.enqueue(value);
+            }}
+          >
+            <MainMenu>
+              <MainMenu.Item
+                icon={<ArrowLeft size={16} />}
+                onSelect={() => void leave("back")}
+              >
+                白板列表
+              </MainMenu.Item>
+              <MainMenu.Item
+                icon={<Upload size={16} />}
+                onSelect={() => input.current?.click()}
+              >
+                导入白板
+              </MainMenu.Item>
+              <MainMenu.Item
+                icon={<Download size={16} />}
+                onSelect={() => downloadSnapshot(queue.latest, board.title)}
+              >
+                导出白板备份
+              </MainMenu.Item>
+              <MainMenu.DefaultItems.SaveAsImage />
+              <MainMenu.DefaultItems.SearchMenu />
+              <MainMenu.DefaultItems.ClearCanvas />
+              <MainMenu.Item
+                icon={<RefreshCw size={16} />}
+                onSelect={() => void leave("reload")}
+              >
+                重新加载云端版本
+              </MainMenu.Item>
+              <MainMenu.Separator />
+              <MainMenu.DefaultItems.ToggleTheme />
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+              <MainMenu.DefaultItems.Help />
+              <MainMenu.Item
+                icon={<LogOut size={16} />}
+                onSelect={() => void leave("logout")}
+              >
+                退出编辑
+              </MainMenu.Item>
+            </MainMenu>
+          </Excalidraw>
+        </div>
+        {presentation.active && <FramePresentation {...presentation} />}
       </main>
       {confirmExit && (
         <ConfirmExitDialog

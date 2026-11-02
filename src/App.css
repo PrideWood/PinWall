@@ -423,7 +423,7 @@
     padding: 24px;
   }
 }
-/* The only persistent addition to the native canvas is one toolbar icon. */
+/* Small additions alongside the native canvas controls. */
 .editor-shell {
   position: relative;
 }
@@ -448,6 +448,66 @@
 .excalidraw .excalidraw-owner-button.is-owner {
   background: var(--color-primary-light, #e3e2fe);
   color: var(--color-primary-darker, #4b43ac);
+}
+.canvas-surface {
+  width: 100%;
+  height: 100%;
+}
+.canvas-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+.excalidraw .excalidraw-presentation-button {
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--border-radius-lg, 8px);
+  color: var(--icon-fill-color, #3d3d3d);
+  background: var(--island-bg-color, #fff);
+  box-shadow: var(--shadow-island, 0 1px 5px #00000012);
+  font-size: 13px;
+}
+.canvas-surface.is-presenting .excalidraw .layer-ui__wrapper {
+  visibility: hidden;
+}
+.canvas-surface.is-presenting {
+  pointer-events: none;
+}
+.presentation-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  touch-action: none;
+}
+.presentation-controls {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--page-text);
+  background: var(--surface-bg);
+  border-top: 1px solid var(--page-border);
+}
+.presentation-controls button {
+  height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.presentation-controls button:disabled {
+  cursor: default;
+}
+.presentation-controls span {
+  min-width: 48px;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme="dark"] .presentation-controls button:hover:enabled {
+  background: #363640;
 }
 .edit-save-dot {
   position: absolute;
