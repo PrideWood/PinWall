@@ -14,6 +14,8 @@ import {
   Upload,
   Smartphone,
   Presentation,
+  Ellipsis,
+  ChevronUp,
 } from "lucide-react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { Board, Snapshot, User } from "../types/board";
@@ -64,6 +66,7 @@ export function BoardEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [confirmExit, setConfirmExit] = useState(false);
+  const [mobileToolsExpanded, setMobileToolsExpanded] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const presentation = useFramePresentation(api);
   useHandleLibrary({ excalidrawAPI: api });
@@ -192,7 +195,7 @@ export function BoardEditor({
       )}
       <main className="canvas">
         <div
-          className={`canvas-surface${presentation.active ? " is-presenting" : ""}`}
+          className={`canvas-surface mobile-editor${mobileToolsExpanded ? " mobile-tools-expanded" : ""}${presentation.active ? " is-presenting" : ""}`}
           onContextMenuCapture={presentation.active ? (event) => { event.preventDefault(); event.stopPropagation(); } : undefined}
         >
           <Excalidraw
@@ -206,11 +209,24 @@ export function BoardEditor({
             UIOptions={{ canvasActions: { toggleTheme: true } }}
             name={board.title}
             libraryReturnUrl={libraryReturnUrl(location.href, board.id)}
-            renderTopRightUI={() => (
+            renderTopRightUI={(isMobile, state) => (
               <div className="canvas-toolbar-actions">
-                <button className="excalidraw-presentation-button" aria-label="演示" title="演示" onClick={presentation.start} disabled={!api || busy}>
-                  <Presentation size={18} />
-                </button>
+                {isMobile ? (
+                  <button
+                    className="excalidraw-mobile-tools-button"
+                    aria-label={mobileToolsExpanded ? "收起工具" : "更多工具"}
+                    title={mobileToolsExpanded ? "收起工具" : "更多工具"}
+                    aria-expanded={mobileToolsExpanded}
+                    data-active-tool={state.activeTool.type}
+                    onClick={() => setMobileToolsExpanded((expanded) => !expanded)}
+                  >
+                    {mobileToolsExpanded ? <ChevronUp size={22} /> : <Ellipsis size={22} />}
+                  </button>
+                ) : (
+                  <button className="excalidraw-presentation-button" aria-label="演示" title="演示" onClick={presentation.start} disabled={!api || busy}>
+                    <Presentation size={18} />
+                  </button>
+                )}
                 <button
                   className="excalidraw-owner-button is-owner"
                   aria-label="退出编辑"
@@ -242,6 +258,9 @@ export function BoardEditor({
                 onSelect={() => void leave("back")}
               >
                 白板列表
+              </MainMenu.Item>
+              <MainMenu.Item icon={<Presentation size={16} />} onSelect={presentation.start}>
+                演示画框
               </MainMenu.Item>
               <MainMenu.Item
                 icon={<Upload size={16} />}

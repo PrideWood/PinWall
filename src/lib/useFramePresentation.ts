@@ -9,7 +9,18 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
   const [slides, setSlides] = useState<ReturnType<typeof presentationFrames>>([]);
   const [index, setIndex] = useState(0);
   const previous = useRef<View | null>(null);
+  const fullscreenRequest = useRef<{ entered: boolean } | null>(null);
   const active = slides.length > 0;
+
+  const leaveFullscreen = useCallback(() => {
+    const request = fullscreenRequest.current;
+    fullscreenRequest.current = null;
+    if (request?.entered && document.fullscreenElement === document.documentElement) {
+      void document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => leaveFullscreen, [leaveFullscreen]);
 
   const start = () => {
     if (!api || previous.current) return;
@@ -26,15 +37,31 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
     });
     setIndex(0);
     setSlides(frames);
+    const root = document.documentElement;
+    // Request directly from the click so the browser can use its user activation.
+    if (!document.fullscreenElement && root.requestFullscreen) {
+      const request = { entered: false };
+      fullscreenRequest.current = request;
+      void root.requestFullscreen().then(() => {
+        if (fullscreenRequest.current === request) request.entered = true;
+        else if (!fullscreenRequest.current && document.fullscreenElement === root) {
+          return document.exitFullscreen();
+        }
+      }).catch(() => {
+        if (fullscreenRequest.current === request) fullscreenRequest.current = null;
+      });
+    }
   };
 
   const exit = useCallback(() => {
-    if (api && previous.current) {
-      api.updateScene({ appState: previous.current, captureUpdate: CaptureUpdateAction.NEVER });
-      previous.current = null;
+    const view = previous.current;
+    previous.current = null;
+    if (api && view) {
+      api.updateScene({ appState: view, captureUpdate: CaptureUpdateAction.NEVER });
     }
     setSlides([]);
-  }, [api]);
+    leaveFullscreen();
+  }, [api, leaveFullscreen]);
 
   const move = useCallback((delta: number) => {
     setIndex((page) => presentationPage(page, delta, slides.length));
@@ -60,6 +87,7 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
     focus();
     let { width, height } = api.getAppState();
     return api.onChange((_elements, state) => {
+      if (!previous.current) return;
       if (state.width === width && state.height === height) return;
       width = state.width;
       height = state.height;
@@ -69,19 +97,29 @@ export function useFramePresentation(api: ExcalidrawImperativeAPI | null) {
 
   useEffect(() => {
     if (!active) return;
+    const fullscreenChanged = () => {
+      const request = fullscreenRequest.current;
+      if (!request) return;
+      if (document.fullscreenElement === document.documentElement) request.entered = true;
+      else if (request.entered) exit();
+    };
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") exit();
-      else if (event.key === "ArrowLeft") move(-1);
-      else if (event.key === "ArrowRight") move(1);
+      else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(event.key)) move(-1);
+      else if (["ArrowRight", "ArrowDown", "PageDown"].includes(event.key)) move(1);
       else if (event.key === "+" || event.key === "=") zoom(1.2);
       else if (event.key === "-") zoom(1 / 1.2);
       else if (event.key === "Tab" || ((event.key === "Enter" || event.key === " ") &&
-        event.target instanceof Element && event.target.closest(".presentation-controls"))) return;
+        event.target instanceof Element && event.target.closest(".presentation-overlay"))) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };
     window.addEventListener("keydown", keyboard, true);
-    return () => window.removeEventListener("keydown", keyboard, true);
+    document.addEventListener("fullscreenchange", fullscreenChanged);
+    return () => {
+      window.removeEventListener("keydown", keyboard, true);
+      document.removeEventListener("fullscreenchange", fullscreenChanged);
+    };
   }, [active, exit, move, zoom]);
 
   return { active, start, exit, move, zoom, index, count: slides.length };

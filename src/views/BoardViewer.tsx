@@ -73,6 +73,9 @@ export function BoardViewer({
               <MainMenu.Item icon={<ArrowLeft size={16} />} onSelect={onBack}>
                 白板列表
               </MainMenu.Item>
+              <MainMenu.Item icon={<Presentation size={16} />} onSelect={presentation.start}>
+                演示画框
+              </MainMenu.Item>
               <MainMenu.Item icon={<Smartphone size={16} />} onSelect={onEdit}>
                 授权编辑
               </MainMenu.Item>
